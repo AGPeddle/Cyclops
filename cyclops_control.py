@@ -16,12 +16,15 @@ def make_control():
     control['conv_tol'] = 01.0e-6  # Tolerance for iterative convergence
 
     control['HMM_T0'] = 0.5  # Used in wave averaging kernel
+    control['HMM_T0_L'] = 0.2  # Used in wave averaging kernel
+    control['HMM_T0_M'] = 0.2  # Used in wave averaging kernel
     control['mu'] = 1.0e-4  # Hyperviscosity parameter
-    control['outFileStem'] = 'test'  # Stem for creation of output files
+    control['outFileStem'] = None  # Stem for creation of output files
+    control['assim_cycle_length'] = 10  # Time at which EnKF is applied
 
-    control['f_naught'] = 1
-    control['H_naught'] = 1
-    control['gravity'] = 1
+    control['f_naught'] = 0.001
+    control['H_naught'] = 2
+    control['gravity'] = 9.8
 
     return control
 
@@ -29,16 +32,20 @@ def setup_control(invals):
 
     control = make_control()
 
-    opts, args = getopt.gnu_getopt(invals, '', ['filename=', 'Nx=', 'coarse_timestep=', 'fine_timestep=', 'final_time=', 'outFileStem=', 'f_naught=', 'H_naught=', 'gravity=', 'Nt='])
+    opts, args = getopt.gnu_getopt(invals, '', ['filename=', 'Nx=', 'Lx=', 'coarse_timestep=', 'fine_timestep=', 'final_time=', 'outFileStem=', 'f_naught=', 'H_naught=', 'gravity=', 'Nt=', 'mu=', 'assim_cycle_length=', 'HMM_T0_L=', 'HMM_T0_M='])
     for o, a in opts:
         if o in ("--filename"):
             control['filename'] = a
         elif o in ("--Nx"):
             control['Nx'] = int(a)
+        elif o in ("--Lx"):
+            control['Lx'] = float(a)
         elif o in ("--Nt"):
             control['Nt'] = int(a)
-        elif o in ("--timestep"):
-            control['timestep'] = float(a)
+        elif o in ("--fine_timestep"):
+            control['fine_timestep'] = float(a)
+        elif o in ("--coarse_timestep"):
+            control['coarse_timestep'] = float(a)
         elif o in ("--final_time"):
             control['final_time'] = float(a)
         elif o in ("--outFileStem"):
@@ -51,6 +58,14 @@ def setup_control(invals):
             control['H_naught'] = float(a)
         elif o in ("--gravity"):
             control['gravity'] = float(a)
+        elif o in ("--mu"):
+            control['mu'] = float(a)
+        elif o in ("--assim_cycle_length"):
+            control['assim_cycle_length'] = int(a)
+        elif o in ("--HMM_T0_L"):
+            control['HMM_T0_L'] = float(a)
+        elif o in ("--HMM_T0_M"):
+            control['HMM_T0_M'] = float(a)
 
     return control
 

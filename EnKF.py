@@ -47,7 +47,7 @@ class Ensemble_Kalman:
         X = np.dot(self.H, A2)
         X = np.dot(X, self.H.T) + np.dot(ens_perts, ens_perts.T)
 
-        X = np.linalg.inv(X)
+        X = np.linalg.pinv(X)
 
         RHS = np.dot(A2, self.H.T)
         RHS = np.dot(RHS, X)

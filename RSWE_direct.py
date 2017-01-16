@@ -3,7 +3,7 @@
 """
 #from spectral_toolbox import SpectralToolbox
 import numpy as np
-import matplotlib.pyplot as plt
+import time
 
 class Solvers:
     @staticmethod
@@ -64,8 +64,12 @@ class Solvers:
             "limit fine timestep size to avoid overshooting the last timestep"
             dt = min(control['coarse_timestep'], control['final_time']-t)
 
-            U_hat_new = strang_splitting(U_hat_old, dt, control, expInt, st, dissipative_exponential, compute_average_force)
-            U_hat_new = expInt.call(U_hat_new, dt)
+            start = time.time()
+            U_hat_new = strang_splitting(U_hat_old, dt, control, expInt, st, dissipative_exponential, compute_average_force2)
+            #U_hat_new = expInt.call(U_hat_new, dt)
+            U_hat_new = expInt[0].call(expInt[1].call(U_hat, dt), dt)
+            end = time.time()
+            print("Time for one timestep was {} seconds".format(end-start))
 
             U_hat_old = U_hat_new
             t += dt
@@ -222,6 +226,63 @@ def filter_kernel_exp(M, s):
     norm = (1.0/float(M))*sum(np.exp(-50*(points - 0.5)**2))
     return np.exp(-50*(s-0.5)**2)/norm
 
+def compute_average_force2(U_hat, control, st, expInt):
+    """
+    This method computed the wave-averaged solution for use with the APinT
+    coarse timestepping.
+
+    The equation solved by this method is a modified equation for a slowly-varying
+    solution (see module header, above). The equation solved is:
+
+    .. math:: \\bar{N}(\\bar{u}) = \\sum \\limits_{m=0}^{M-1} \\rho(s/T_{0})e^{sL}N(e^{-sL}\\bar{u}(t))
+
+    where :math:`\\rho` is the smoothing kernel (`filter_kernel`).
+
+    **Parameters**
+
+    - `U_hat` : the known solution at the current timestep
+    - `linear_operator` : the linear operator being used, to be
+      passed to the nonlinear computation
+
+    **Returns**
+
+    - `U_hat_averaged` : The predicted averaged solution at the next timestep
+
+    **Notes**
+
+    The smooth kernel is chosen so that the length of the time window over which the averaging is
+    performed is as small as possible and the error from the trapezoidal rule is negligible.
+
+    *See Also**
+    `filter_kernel`
+
+    """
+
+    T0_L = control['HMM_T0_L']
+    T0_M = control['HMM_T0_M']
+    M = control['HMM_M_bar_L']
+    N = control['HMM_M_bar_M']
+
+    filter_kernel = filter_kernel_exp
+
+    U_hat_NL_averaged = np.zeros(np.shape(U_hat), dtype = 'complex')
+
+    for m in np.arange(1,M):
+        for n in np.arange(1,N):
+            #print("m,n : {}, {}".format(m, n))
+            tm = T0_L*m/float(M)
+            tn = T0_M*n/float(N)
+            Km = filter_kernel(M, m/float(M))
+            Kn = filter_kernel(N, n/float(N))
+
+            U_hat_RHS = expInt[0].call(expInt[1].call(U_hat, tm), tn)
+            U_hat_RHS = compute_nonlinear(U_hat_RHS, control, st)
+            U_hat_RHS = expInt[0].call(expInt[1].call(U_hat_RHS, -tm), -tn)
+
+            U_hat_NL_averaged += Km*Kn*U_hat_RHS
+
+    return U_hat_NL_averaged/float(M)/float(N)
+
 def compute_average_force(U_hat, control, st, expInt):
     """
     This method computed the wave-averaged solution for use with the APinT
@@ -274,8 +335,11 @@ def compute_average_force(U_hat, control, st, expInt):
 
 def solve(solver_name, control, st, expInt, u_init):
 
-    control['HMM_T0'] = 1.0
-    control['HMM_M_bar'] = 100*control['HMM_T0']
+    """
+    if solver_name == 'coarse_propagator':
+        control['HMM_T0'] = control['HMM_T0_g']
+        control['HMM_M_bar'] = 100*control['HMM_T0']
+    """
 
     out_sols = np.zeros((3, control['Nx'], control['Nx']), dtype = 'complex')
     for k in range(3):
