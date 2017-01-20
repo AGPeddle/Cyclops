@@ -2,7 +2,6 @@ import sys
 import os
 import pickle
 import numpy as np
-import matplotlib.pyplot as plt
 import cyclops_control
 import RSWE_direct
 
@@ -55,7 +54,7 @@ class Ensemble_Kalman:
 
         return A + RHS
 
-
+"""
 def test(control):
 
     control['solver'] = "fine_propagator"
@@ -75,12 +74,6 @@ def test(control):
     U = np.zeros((size, 3, control['Nx']))
     for k in range(size):
         U[k, 2, :] = ICs[k, 2, :]
-
-    """
-    for i in range(size):
-        plt.plot(x_grid, U[i, 2, :])
-    plt.show()
-    """
 
     for nt, T in enumerate(ts[1:]):
         print("Running timestep {} ending at {}".format(nt, T))
@@ -111,3 +104,4 @@ def test(control):
 if __name__ == "__main__":
     control_in = cyclops_control.setup_control(sys.argv[1:])
     test(control_in)
+"""

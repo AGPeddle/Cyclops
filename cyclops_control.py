@@ -21,6 +21,7 @@ def make_control():
     control['mu'] = 1.0e-4  # Hyperviscosity parameter
     control['outFileStem'] = None  # Stem for creation of output files
     control['assim_cycle_length'] = 10  # Time at which EnKF is applied
+    control['solver'] = 'fine_propagator'  # Solver choice
 
     control['f_naught'] = 0.001
     control['H_naught'] = 2
@@ -32,7 +33,7 @@ def setup_control(invals):
 
     control = make_control()
 
-    opts, args = getopt.gnu_getopt(invals, '', ['filename=', 'Nx=', 'Lx=', 'coarse_timestep=', 'fine_timestep=', 'final_time=', 'outFileStem=', 'f_naught=', 'H_naught=', 'gravity=', 'Nt=', 'mu=', 'assim_cycle_length=', 'HMM_T0_L=', 'HMM_T0_M='])
+    opts, args = getopt.gnu_getopt(invals, '', ['filename=', 'Nx=', 'Lx=', 'coarse_timestep=', 'fine_timestep=', 'final_time=', 'outFileStem=', 'f_naught=', 'H_naught=', 'gravity=', 'Nt=', 'mu=', 'assim_cycle_length=', 'HMM_T0_L=', 'HMM_T0_M=', 'solver='])
     for o, a in opts:
         if o in ("--filename"):
             control['filename'] = a
@@ -66,6 +67,8 @@ def setup_control(invals):
             control['HMM_T0_L'] = float(a)
         elif o in ("--HMM_T0_M"):
             control['HMM_T0_M'] = float(a)
+        elif o in ("--solver"):
+            control['solver'] = a
 
     return control
 

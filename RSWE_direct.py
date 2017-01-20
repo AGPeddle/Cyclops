@@ -95,13 +95,15 @@ def dissipative_exponential(control, expInt, U_hat, t):
 
     """
 
+    kc = 21  # control['Nx']//3
     U_hat_sp = np.zeros((3, control['Nx'], control['Nx']), dtype = 'complex')
-    wavenumbers_x = np.arange(-control['Nx']/2, control['Nx']/2)
-    wavenumbers_y = np.arange(-control['Nx']/2, control['Nx']/2)
+    wavenumbers_x = np.arange(-control['Nx']/2, control['Nx']/2)/kc
+    wavenumbers_y = np.arange(-control['Nx']/2, control['Nx']/2)/kc
 
     wavenums_x, wavenums_y = np.meshgrid(wavenumbers_x, wavenumbers_y)
 
-    exp_D = np.exp(-control['mu']*t*(wavenums_x**4 + wavenums_y**4))
+    p = 8
+    exp_D = np.exp(-control['mu']*t*(wavenums_x**p + wavenums_y**p))
     for k in range(3):
         U_hat_sp[k,:,:] = exp_D*U_hat[k,:,:]
     return U_hat_sp
@@ -334,12 +336,6 @@ def compute_average_force(U_hat, control, st, expInt):
 ########## END WAVE AVERAGING ROUTINES ##########
 
 def solve(solver_name, control, st, expInt, u_init):
-
-    """
-    if solver_name == 'coarse_propagator':
-        control['HMM_T0'] = control['HMM_T0_g']
-        control['HMM_M_bar'] = 100*control['HMM_T0']
-    """
 
     out_sols = np.zeros((3, control['Nx'], control['Nx']), dtype = 'complex')
     for k in range(3):

@@ -14,9 +14,8 @@ def main(control):
     """
     # Hardcoded for now:
     control['final_time'] = 1.0
-    control['Nt'] = 4
-    solver = 'coarse_propagator'
-    #solver = 'fine_propagator'
+    if control['outFileStem'] is None: control['outFileStem'] = ''
+    solver = control['solver']
 
     # Set up initial (truth) field
     ICs = cyclops_base.read_ICs(control, control['filename'])
@@ -36,25 +35,27 @@ def main(control):
 
     metrics = rswe_metrics.Metrics()
 
+
+    # Set up initial (truth) field
+    ICs = cyclops_base.read_ICs(control, control['filename'])
+    truth = ICs
+
+    st = SpectralToolbox(control['Nx'], control['Lx'])
+    expInt = ExponentialIntegrator_Dim(control)
+
+    metrics = rswe_metrics.Metrics()
+
     X = np.linspace(0,control['Lx'],control['Nx'])
     x, y = np.meshgrid(X,X)
 
     # Propagate it through Nts
-    plt.figure()
-    plt.contourf(x, y,  truth[2, :, :])
-    plt.colorbar()
-    plt.show()
     fulltime = 0
 
     for i in range(0, control['Nt']):
-        truth[:, :, :] = RSWE_direct.solve(solver,  control, st, expInt, truth[:, :, :])
+        truth[:, :, :] = RSWE_direct.solve('fine_propagator', control, st, expInt, truth[:, :, :])
         fulltime += control['final_time']
-        plt.figure()
-        plt.contourf(x, y,  truth[2, :, :])
-        plt.colorbar()
-        plt.show()
 
-        with open("{}_truth_{}.dat".format(control['filename'], i), 'wb') as f:
+        with open("{}{}_truth_{}.dat".format(control['filename'], control['outFileStem'], i), 'wb') as f:
             data = dict()
             data['time'] = fulltime
             data['u'] = truth[0,:,:]

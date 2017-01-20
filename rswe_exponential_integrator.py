@@ -63,7 +63,7 @@ import logging
 from scipy.linalg import expm
 
 import cyclops_control
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 import sys
 import spectral_toolbox
 import RSWE_direct
@@ -850,6 +850,7 @@ def h_init():
 if __name__ == "__main__":
     control = cyclops_control.setup_control(sys.argv[1:])
     st = spectral_toolbox.SpectralToolbox(control['Nx'], control['Lx'])
+    """
     T = 1000
 
     X, Y, U = h_init()
@@ -895,4 +896,4 @@ if __name__ == "__main__":
     plt.colorbar()
 
     plt.show()
-
+    """
