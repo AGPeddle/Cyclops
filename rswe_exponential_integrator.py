@@ -60,7 +60,6 @@ numpy
 
 import numpy as np
 import logging
-from scipy.linalg import expm
 
 import cyclops_control
 #import matplotlib.pyplot as plt
@@ -139,9 +138,9 @@ class ExponentialIntegrator:
         h_hat_sp = np.conj(rk02) * v1_hat + np.conj(rk12) * v2_hat + np.conj(rk22) * h_hat
 
         # Apply exp(-t*L)
-        omega0 = self.eVals[0,:,:]; omega0 = np.exp(-1j*omega0*t*self._diveps)  # omega0[:,:] = 1.0
-        omega1 = self.eVals[1,:,:]; omega1 = np.exp(-1j*omega1*t*self._diveps)
-        omega2 = self.eVals[2,:,:]; omega2 = np.exp(-1j*omega2*t*self._diveps)
+        omega0 = self.eVals[0,:,:]; omega0 = np.exp(-1j*omega0*t)  # omega0[:,:] = 1.0
+        omega1 = self.eVals[1,:,:]; omega1 = np.exp(-1j*omega1*t)
+        omega2 = self.eVals[2,:,:]; omega2 = np.exp(-1j*omega2*t)
 
         U_hat_sp[0,:,:] = omega0 * rk00 * v1_hat_sp +  omega1 * rk01 * v2_hat_sp + \
                           omega2 * rk02 * h_hat_sp
@@ -206,8 +205,8 @@ class ExponentialIntegrator:
 
         # Apply exp(-t*L)
         omega0 = self.eVals[0,:,:]; omega0[:,:] = 1.0 #omega0 = np.exp(-1j*omega0*t/self._eps)
-        omega1 = self.eVals[1,:,:]; omega1 = np.exp(-1j*omega1*-t*self._diveps)
-        omega2 = self.eVals[2,:,:]; omega2 = np.exp(-1j*omega2*-t*self._diveps)
+        omega1 = self.eVals[1,:,:]; omega1 = np.exp(-1j*omega1*-t)
+        omega2 = self.eVals[2,:,:]; omega2 = np.exp(-1j*omega2*-t)
 
         sigmas[0,:,:] = omega0*sig_0
         sigmas[1,:,:] = omega1*sig_m1
@@ -216,7 +215,7 @@ class ExponentialIntegrator:
         return sigmas
 
 
-class ExponentialIntegrator_Dim(ExponentialIntegrator):
+class ExponentialIntegrator_FullEqs(ExponentialIntegrator):
     """
     Implements the exponential integrator for the dimensional, perturbation-height
     Rotating Shallow Water Equations which have been symmetrised with respect to
@@ -255,7 +254,6 @@ class ExponentialIntegrator_Dim(ExponentialIntegrator):
         self.f0 = control['f_naught']
         self.g = control['gravity']
         self.phi0 = self.g*self.H0
-        self._diveps = 1.0
 
         # Factor arising from spectral derivative on domain of size L
         self.deriv_factor = 2.0*np.pi/control['Lx']
@@ -272,6 +270,20 @@ class ExponentialIntegrator_Dim(ExponentialIntegrator):
                 # Create eigenvals/vects for given wavenumber
                 # combination. Consider shift between array and
                 # spectrum
+                """
+                L_op = np.zeros((3,3), dtype = complex)
+                L_op[0,1] = -self.f0
+                L_op[1,0] = self.f0
+                L_op[2,0] = np.sqrt(self.phi0)*k1*1j*self.deriv_factor
+                L_op[2,1] = np.sqrt(self.phi0)*k2*1j*self.deriv_factor
+                L_op[0,2] = np.sqrt(self.phi0)*k1*1j*self.deriv_factor
+                L_op[1,2] = np.sqrt(self.phi0)*k2*1j*self.deriv_factor
+
+                eVals, eBasis = np.linalg.eig(L_op)
+                self.eVals[:,k1 + ctr_shift, k2 + ctr_shift] = np.imag(eVals)
+                self.eBasis[:,:,k1 + ctr_shift, k2 + ctr_shift]  = eBasis
+                """
+
                 self.eVals[:,k1 + ctr_shift, k2 + ctr_shift]    = self.create_eigenvalues(k1, k2)
                 self.eBasis[:,:,k1 + ctr_shift, k2 + ctr_shift] = self.create_eigenbasis(k1, k2)
 
@@ -378,130 +390,6 @@ class ExponentialIntegrator_Dim(ExponentialIntegrator):
         return A
 
 
-class ExponentialIntegrator_nonDim(ExponentialIntegrator):
-    """
-    Implements the exponential integrator for the nondimensional formulation of
-    the Rotating Shallow Water Equations.
-
-    This class implements the exponential integrator objects, which precompute and store
-    the eigenvalues and eigenvectors of the linear operator in Fourier space and apply
-    the matrix exponential for a given timestep when invoked. See module header for
-    explanation of computation.
-
-    **Attributes**
-
-    - `H0` : the mean water depth
-    - `deriv_factor` : factor of 2*pi/L due to spectral differentiation
-    - `_Nx` : Number of grid points, such that domain is Nx X Nx
-    - `eVals` : Vector of eigenvalues, ordered alpha = 0, -1, 1
-    - `eBasis` : Corresponding orthonormalised matrix of eigenvectors, arranged in columns
-
-    - `_eps` : Epsilon, used in nondimensional formulation
-    - `_F` : Rossby deformation radius (should be O(1))
-
-    **Methods**
-
-    - `create_eigenvalues` : Set up the analytically-computed eigenvalues for L
-    - `create_eigenbasis` : Set up the analyticall-computed eigenbasis for L
-    - `call` : Invoke the matrix exponential (inherited)
-
-    **Parameters**
-
-    - `control` : Control object containing the relevant parameters/constants for initialisation
-
-    """
-
-    def __init__(self,control):
-        # Physical parameters:
-        self.H0 = control['H_naught']
-        self._eps = control['epsilon']
-        self._diveps = 1.0/self._eps
-        self._F = control['deformation_radius']
-
-        # Factor arising from spectral derivative on domain of size L
-        self.deriv_factor = 2.0*np.pi/control['Lx']
-
-        self._Nx = control['Nx']
-        self.eVals  = np.zeros((3,self._Nx,self._Nx),   dtype = np.float64)
-        self.eBasis = np.zeros((3,3,self._Nx,self._Nx), dtype = complex)
-
-        linearOperator = np.zeros(shape = (3,3), dtype = complex)
-        ctr_shift = self._Nx//2  # Python arrays are numbered from 0 to N-1, spectrum goes from -N/2 to N/2-1
-
-        for k1 in range(-self._Nx//2, self._Nx//2):
-            for k2 in range(-self._Nx//2, self._Nx//2):
-                self.eVals[:,k1 + ctr_shift, k2 + ctr_shift]    = self.create_eigenvalues(k1, k2)
-                self.eBasis[:,:,k1 + ctr_shift, k2 + ctr_shift] = self.create_eigenbasis(k1, k2)
-
-    def create_eigenvalues(self, k1, k2):
-        """
-        Creates the eigenvalues required for the creation of the eigenbasis (of the linear operator).
-        Note that these have been found analytically and so an arbitrary L is not currently supported.
-
-        **Parameters**
-
-        - `k1`, `k2` : the wavenumbers in the x- and y- directions
-
-        **Returns**
-
-        - `eVals` : eigenvalues for slow mode and fast waves in - and + directions, in that order
-
-        **Notes**
-
-        Note that these have been found analytically and so an arbitrary L is not currently supported.
-
-        """
-
-        eVals = np.zeros(3, dtype = np.float64)
-        eVals[0] = 0.
-        eVals[1] = -np.sqrt(1. + (k1**2 + k2**2)/self._F)
-        eVals[2] = np.sqrt(1. + (k1**2 + k2**2)/self._F)
-
-        return eVals
-
-    def create_eigenbasis(self, k1, k2):
-        """
-        Create the eigenbasis of the linear operator. As with the eigenvalues, it is an implementation of
-        an analytical solution.
-
-        **Parameters**
-
-        - `k1`, `k2` : the wavenumbers in the x- and y- directions
-
-        **Returns**
-
-        - `A` : eigenvectors of L in columns, with slow mode 1st then fast waves in - and + directions
-
-        **Notes**
-
-        1) Note that these have been found analytically and so an arbitrary L is not currently supported.
-        2) The eigenbasis is orthonormalised
-        """
-
-        A = np.zeros((3,3), dtype = complex)
-        if k1 != 0 or k2 != 0:
-            f = np.sqrt(self._F)
-            kappa = k1**2 + k2**2
-            omega = 1j*f*np.sqrt(1 + kappa/(f**2))
-
-            # Eigenvectors in columns corresponding to slow mode and
-            # fast waves travelling in either direction
-            A = np.array([[-1j*k2/f, 1j*(f*k2 + k1*omega)/kappa,            1j*(f*k2 - k1*omega)/kappa],
-                          [1j*k1/f,  -1j*(f**2 + k2**2)/(f*k1 + k2*omega),  -1j*(f**2 + k2**2)/(f*k1 - k2*omega)],
-                          [1.,       1.,                                    1.]], dtype = complex)
-
-            A[:,0] = A[:,0]/np.sqrt(1 + 1/f**2 * kappa)
-            A[:,1] = A[:,1]/(np.sqrt(2) * np.sqrt(1 + f**2 * 1/kappa))
-            A[:,2] = A[:,2]/(np.sqrt(2) * np.sqrt(1 + f**2 * 1/kappa))
-
-        else:  # Special case for k1 = k2 = 0
-            A = np.array([[0., -1j/np.sqrt(2.), 1j/np.sqrt(2.)],\
-                          [0., 1./np.sqrt(2.),  1./np.sqrt(2.)],\
-                          [1., 0.,              0.]],dtype = complex)
-
-        return A
-
-
 class ExpInt_Rotational(ExponentialIntegrator):
     """
     Implements the exponential integrator for the dimensional, perturbation-height
@@ -538,7 +426,6 @@ class ExpInt_Rotational(ExponentialIntegrator):
     def __init__(self,control):
         # Physical parameters:
         self.f0 = control['f_naught']
-        self._diveps = 1.0
 
         # Factor arising from spectral derivative on domain of size L
         self.deriv_factor = 2.0*np.pi/control['Lx']
@@ -662,7 +549,6 @@ class ExpInt_Gravitational(ExponentialIntegrator):
         self.H0 = control['H_naught']
         self.g = control['gravity']
         self.phi0 = self.g*self.H0
-        self._diveps = 1.0
 
         # Factor arising from spectral derivative on domain of size L
         self.deriv_factor = 2.0*np.pi/control['Lx']
@@ -779,13 +665,9 @@ class ExpInt_Gravitational(ExponentialIntegrator):
         return A
 
 class expM(ExponentialIntegrator):
-    def __init__(self, control, ei_rot, ei_grav):
+    def __init__(self, control, ei_L, op_K):
 
-        self._Nx = ei_grav.eBasis.shape[-1]
-        self._diveps = 1.0
-        R = np.zeros((3,3))
-        R[0,1] = control['f_naught']
-        R[1,0] = control['f_naught']
+        self._Nx = ei_L.eBasis.shape[-1]
 
         self.eVals  = np.zeros((3,self._Nx,self._Nx),   dtype = np.float64)
         self.eBasis = np.zeros((3,3,self._Nx,self._Nx), dtype = complex)
@@ -793,13 +675,13 @@ class expM(ExponentialIntegrator):
 
         for k1 in range(self._Nx):
             for k2 in range(self._Nx):
-                #middle[:,:,k1,k2] = np.dot(np.dot(np.dot(np.dot(np.transpose(ei_rot.eBasis[:,:,k1,k2]), ei_grav.eBasis[:,:,k1,k2]), np.diag(ei_grav.eVals[:,k1,k2])),np.transpose(ei_grav.eBasis[:,:,k1,k2])), ei_rot.eBasis[:,:,k1,k2])
-                middle[:,:,k1,k2] = np.dot(np.dot(np.conj(np.transpose(ei_grav.eBasis[:,:,k1,k2])), R), ei_grav.eBasis[:,:,k1,k2])
+                middle[:,:,k1,k2] = np.dot(np.conj(np.transpose(ei_L.eBasis[:,:,k1,k2])), op_K[:,:,k1,k2])
+                middle[:,:,k1,k2] = np.dot(middle[:,:,k1,k2], ei_L.eBasis[:,:,k1,k2])
 
         M_op = np.zeros((3, 3, self._Nx, self._Nx), dtype= 'complex')
 
-        T0 = control['HMM_T0_M']
-        M = control['HMM_M_bar_M']
+        T0 = control['HMM_T0_L']
+        M = control['HMM_M_bar_L']
         filter_kernel = RSWE_direct.filter_kernel_exp
 
         for m in np.arange(1,M):
@@ -809,27 +691,55 @@ class expM(ExponentialIntegrator):
             for k1 in range(self._Nx):
                 for k2 in range(self._Nx):
 
-                    omega0 = ei_grav.eVals[0,k1,k2]; omega0 = 1.0 #omega0 = np.exp(-1j*omega0*t/self._eps)
-                    omega1 = ei_grav.eVals[1,k1,k2]; omega1 = np.exp(-1j*omega1*tm)
-                    omega2 = ei_grav.eVals[2,k1,k2]; omega2 = np.exp(-1j*omega2*tm)
+                    omega0 = ei_L.eVals[0,k1,k2]; omega0 = np.exp(-1j*omega0*-tm)
+                    omega1 = ei_L.eVals[1,k1,k2]; omega1 = np.exp(-1j*omega1*-tm)
+                    omega2 = ei_L.eVals[2,k1,k2]; omega2 = np.exp(-1j*omega2*-tm)
 
                     Lambda = np.diag(np.array([omega0, omega1, omega2]))
 
-                    omega0 = ei_grav.eVals[0,k1,k2]; omega0 = 1.0 #omega0 = np.exp(-1j*omega0*t/self._eps)
-                    omega1 = ei_grav.eVals[1,k1,k2]; omega1 = np.exp(-1j*omega1*-tm)
-                    omega2 = ei_grav.eVals[2,k1,k2]; omega2 = np.exp(-1j*omega2*-tm)
+                    omega0 = ei_L.eVals[0,k1,k2]; omega0 = np.exp(-1j*omega0*tm)
+                    omega1 = ei_L.eVals[1,k1,k2]; omega1 = np.exp(-1j*omega1*tm)
+                    omega2 = ei_L.eVals[2,k1,k2]; omega2 = np.exp(-1j*omega2*tm)
 
                     Lambda_min = np.diag(np.array([omega0, omega1, omega2]))
 
-                    M_op[:,:,k1,k2] += np.dot(np.dot(np.dot(ei_grav.eBasis[:,:,k1,k2], np.dot(Lambda, middle[:,:,k1,k2])), Lambda_min), np.conj(np.transpose(ei_grav.eBasis[:,:,k1,k2])))
+                    M_buff = np.dot(ei_L.eBasis[:,:,k1,k2], Lambda)
+                    M_buff = np.dot(M_buff, middle[:,:,k1,k2])
+                    M_buff = np.dot(M_buff, Lambda_min)
+                    M_buff = np.dot(M_buff, np.conj(np.transpose(ei_L.eBasis[:,:,k1,k2])))
+                    M_op[:,:,k1,k2] += Km*M_buff
 
         M_op/=float(M)
 
         for k1 in range(self._Nx):
             for k2 in range(self._Nx):
-                self.eVals[:,k1,k2], self.eBasis[:,:,k1,k2] = np.linalg.eig(M_op[:,:,k1,k2])
+                eVals, self.eBasis[:,:,k1,k2] = np.linalg.eig(M_op[:,:,k1,k2])
+                self.eVals[:,k1,k2] = np.imag(eVals)
 
-def h_init():
+
+def make_Lop_rot(control):
+    Lop = np.zeros((3, 3, control['Nx'], control['Nx']))
+    Lop[0,1,:,:] = -control['f_naught']
+    Lop[1,0,:,:] = control['f_naught']
+
+    return Lop
+
+def make_Lop_grav(control):
+    Lop = np.zeros((3, 3, control['Nx'], control['Nx']))
+    ctr_shift = self._Nx//2  # Python arrays are numbered from 0 to N-1, spectrum goes from -N/2 to N/2-1
+    P = np.sqrt(control['gravity']*control['H_naught'])*2.0*np.pi/control['Lx']
+
+    for k1 in range(-control['Nx']//2, control['Nx']//2):
+        for k2 in range(-control['Nx']//2, control['Nx']//2):
+            Lop[2, 0, k1 + ctr_shift, k2 + ctr_shift] = 1j*P*k1
+            Lop[2, 1, k1 + ctr_shift, k2 + ctr_shift] = 1j*P*k2
+            Lop[0, 2, k1 + ctr_shift, k2 + ctr_shift] = 1j*P*k1
+            Lop[1, 2, k1 + ctr_shift, k2 + ctr_shift] = 1j*P*k2
+
+    return Lop
+
+
+def h_init(control):
     """
     This function sets up the initial condition for the height field.
 
@@ -850,50 +760,4 @@ def h_init():
 if __name__ == "__main__":
     control = cyclops_control.setup_control(sys.argv[1:])
     st = spectral_toolbox.SpectralToolbox(control['Nx'], control['Lx'])
-    """
-    T = 1000
 
-    X, Y, U = h_init()
-
-    ExpInt = ExponentialIntegrator_Dim(control)
-
-    R = ExpInt_Rotational(control)
-    G = ExpInt_Gravitational(control)
-
-    U_one = np.zeros_like(U)
-    U_two = np.zeros_like(U)
-
-    for k in range(3):
-        U[k, :, :] = st.forward_fft(U[k, :, :])
-
-    U_one = ExpInt.call(U, T)
-    U_two = G.call(U, T)
-    U_two = R.call(U_two, T)
-    
-    for k in range(3):
-        U_one[k, :, :] = st.inverse_fft(U_one[k, :, :])
-        U_two[k, :, :] = st.inverse_fft(U_two[k, :, :])
-
-    plt.figure()
-    plt.subplot(2,2,1)
-    plt.contourf(X, Y, U_one[2,:,:])
-    plt.title('True')
-    plt.colorbar()
-
-    plt.subplot(2,2,2)
-    plt.contourf(X, Y, U_two[2,:,:])
-    plt.title('New')
-    plt.colorbar()
-
-    plt.subplot(2,2,3)
-    plt.contourf(X, Y, (U_two[2,:,:] - U_one[2,:,:])/U_one[2,:,:])
-    plt.title('Relative Error')
-    plt.colorbar()
-
-    plt.subplot(2,2,4)
-    plt.contourf(X, Y, U_two[2,:,:] - U_one[2,:,:])
-    plt.title('Absolute Error')
-    plt.colorbar()
-
-    plt.show()
-    """

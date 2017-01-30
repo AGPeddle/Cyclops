@@ -65,11 +65,14 @@ class Solvers:
             dt = min(control['coarse_timestep'], control['final_time']-t)
 
             start = time.time()
-            U_hat_new = strang_splitting(U_hat_old, dt, control, expInt, st, dissipative_exponential, compute_average_force2)
-            #U_hat_new = expInt.call(U_hat_new, dt)
-            U_hat_new = expInt[0].call(expInt[1].call(U_hat, dt), dt)
+            if control['Whitehead']:
+                U_hat_new = strang_splitting(U_hat_old, dt, control, expInt, st, dissipative_exponential, compute_average_force2)
+                U_hat_new = expInt[0].call(expInt[1].call(U_hat, dt), dt)
+            else:
+                U_hat_new = strang_splitting(U_hat_old, dt, control, expInt, st, dissipative_exponential, compute_average_force)
+                U_hat_new = expInt.call(U_hat_new, dt)
             end = time.time()
-            print("Time for one timestep was {} seconds".format(end-start))
+            #print("Time for one timestep was {} seconds".format(end-start))
 
             U_hat_old = U_hat_new
             t += dt
@@ -270,11 +273,10 @@ def compute_average_force2(U_hat, control, st, expInt):
     U_hat_NL_averaged = np.zeros(np.shape(U_hat), dtype = 'complex')
 
     for m in np.arange(1,M):
+        Km = filter_kernel(M, m/float(M))
+        tm = T0_L*m/float(M)
         for n in np.arange(1,N):
-            #print("m,n : {}, {}".format(m, n))
-            tm = T0_L*m/float(M)
             tn = T0_M*n/float(N)
-            Km = filter_kernel(M, m/float(M))
             Kn = filter_kernel(N, n/float(N))
 
             U_hat_RHS = expInt[0].call(expInt[1].call(U_hat, tm), tn)
@@ -283,7 +285,7 @@ def compute_average_force2(U_hat, control, st, expInt):
 
             U_hat_NL_averaged += Km*Kn*U_hat_RHS
 
-    return U_hat_NL_averaged/float(M)/float(N)
+    return U_hat_NL_averaged/float(M*N)
 
 def compute_average_force(U_hat, control, st, expInt):
     """
@@ -335,15 +337,20 @@ def compute_average_force(U_hat, control, st, expInt):
 
 ########## END WAVE AVERAGING ROUTINES ##########
 
-def solve(solver_name, control, st, expInt, u_init):
+def solve(solver_name, control, st, expInt, u_init, invert_fft = True):
 
-    out_sols = np.zeros((3, control['Nx'], control['Nx']), dtype = 'complex')
-    for k in range(3):
-        out_sols[k, :, :] = st.forward_fft(u_init[k, :, :])
+    if invert_fft:
+        out_sols = np.zeros((3, control['Nx'], control['Nx']), dtype = 'complex')
 
-    out_sols = getattr(Solvers, solver_name)(control, expInt, st, out_sols)
+        for k in range(3):
+            out_sols[k, :, :] = st.forward_fft(u_init[k, :, :])
 
-    for k in range(3):
-        out_sols[k, :, :] = st.inverse_fft(out_sols[k, :, :])
+        out_sols = getattr(Solvers, solver_name)(control, expInt, st, out_sols)
 
-    return np.real(out_sols)
+        for k in range(3):
+            out_sols[k, :, :] = st.inverse_fft(out_sols[k, :, :])
+
+    else:
+        out_sols = getattr(Solvers, solver_name)(control, expInt, st, u_init)
+
+    return out_sols
