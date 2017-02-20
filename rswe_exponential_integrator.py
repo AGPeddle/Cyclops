@@ -680,8 +680,11 @@ class expM(ExponentialIntegrator):
 
         M_op = np.zeros((3, 3, self._Nx, self._Nx), dtype= 'complex')
 
-        T0 = control['HMM_T0_L']
-        M = control['HMM_M_bar_L']
+        #T0 = control['HMM_T0_L']
+        #M = control['HMM_M_bar_L']
+        T0 = 5.0*control['coarse_timestep']
+        M = 400
+
         filter_kernel = RSWE_direct.filter_kernel_exp
 
         for m in np.arange(1,M):
@@ -718,15 +721,15 @@ class expM(ExponentialIntegrator):
 
 
 def make_Lop_rot(control):
-    Lop = np.zeros((3, 3, control['Nx'], control['Nx']))
+    Lop = np.zeros((3, 3, control['Nx'], control['Nx']), dtype = complex)
     Lop[0,1,:,:] = -control['f_naught']
     Lop[1,0,:,:] = control['f_naught']
 
     return Lop
 
 def make_Lop_grav(control):
-    Lop = np.zeros((3, 3, control['Nx'], control['Nx']))
-    ctr_shift = self._Nx//2  # Python arrays are numbered from 0 to N-1, spectrum goes from -N/2 to N/2-1
+    Lop = np.zeros((3, 3, control['Nx'], control['Nx']), dtype = complex)
+    ctr_shift = control['Nx']//2  # Python arrays are numbered from 0 to N-1, spectrum goes from -N/2 to N/2-1
     P = np.sqrt(control['gravity']*control['H_naught'])*2.0*np.pi/control['Lx']
 
     for k1 in range(-control['Nx']//2, control['Nx']//2):

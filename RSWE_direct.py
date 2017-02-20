@@ -350,7 +350,9 @@ def solve(solver_name, control, st, expInt, u_init, invert_fft = True):
         for k in range(3):
             out_sols[k, :, :] = st.inverse_fft(out_sols[k, :, :])
 
+        return np.real(out_sols)
+
     else:
         out_sols = getattr(Solvers, solver_name)(control, expInt, st, u_init)
 
-    return out_sols
+        return out_sols

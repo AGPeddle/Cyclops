@@ -16,16 +16,21 @@ def make_control():
     control['conv_tol'] = 01.0e-6  # Tolerance for iterative convergence
 
     control['HMM_T0'] = 0.5  # Used in wave averaging kernel
-    control['HMM_T0_L'] = 0.2  # Used in wave averaging kernel
-    control['HMM_T0_M'] = 0.2  # Used in wave averaging kernel
+    control['HMM_T0_L'] = 0.01  # Used in wave averaging kernel
+    control['HMM_T0_M'] = 0.01  # Used in wave averaging kernel
     control['mu'] = 1.0e-4  # Hyperviscosity parameter
     control['outFileStem'] = None  # Stem for creation of output files
     control['assim_cycle_length'] = 10  # Time at which EnKF is applied
     control['solver'] = 'fine_propagator'  # Solver choice
+    control['Whitehead'] = False  # Solver choice
+    control['rot_stiff'] = False
 
     control['f_naught'] = 0.001
     control['H_naught'] = 2
     control['gravity'] = 9.8
+
+    control['epsilon'] = None
+    control['deformation_radius'] = None
 
     return control
 
@@ -33,7 +38,7 @@ def setup_control(invals):
 
     control = make_control()
 
-    opts, args = getopt.gnu_getopt(invals, '', ['filename=', 'Nx=', 'Lx=', 'coarse_timestep=', 'fine_timestep=', 'final_time=', 'outFileStem=', 'f_naught=', 'H_naught=', 'gravity=', 'Nt=', 'mu=', 'assim_cycle_length=', 'HMM_T0_L=', 'HMM_T0_M=', 'solver='])
+    opts, args = getopt.gnu_getopt(invals, '', ['filename=', 'Nx=', 'Lx=', 'conv_tol=', 'coarse_timestep=', 'fine_timestep=', 'final_time=', 'outFileStem=', 'f_naught=', 'H_naught=', 'gravity=', 'Nt=', 'mu=', 'assim_cycle_length=', 'HMM_T0=', 'HMM_T0_L=', 'HMM_T0_M=', 'solver=', 'Whitehead', 'rot_stiff', 'epsilon=', 'deformation_radius='])
     for o, a in opts:
         if o in ("--filename"):
             control['filename'] = a
@@ -41,6 +46,8 @@ def setup_control(invals):
             control['Nx'] = int(a)
         elif o in ("--Lx"):
             control['Lx'] = float(a)
+        elif o in ("--conv_tol"):
+            control['conv_tol'] = float(a)
         elif o in ("--Nt"):
             control['Nt'] = int(a)
         elif o in ("--fine_timestep"):
@@ -63,12 +70,22 @@ def setup_control(invals):
             control['mu'] = float(a)
         elif o in ("--assim_cycle_length"):
             control['assim_cycle_length'] = int(a)
+        elif o in ("--HMM_T0"):
+            control['HMM_T0'] = float(a)
         elif o in ("--HMM_T0_L"):
             control['HMM_T0_L'] = float(a)
         elif o in ("--HMM_T0_M"):
             control['HMM_T0_M'] = float(a)
+        elif o in ("--epsilon"):
+            control['epsilon'] = float(a)
+        elif o in ("--deformation_radius"):
+            control['deformation_radius'] = float(a)
         elif o in ("--solver"):
             control['solver'] = a
+        elif o in ("--Whitehead"):
+            control['Whitehead'] = True
+        elif o in ("--rot_stiff"):
+            control['rot_stiff'] = True
 
     return control
 

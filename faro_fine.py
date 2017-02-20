@@ -13,7 +13,7 @@ def main(control):
 
     """
     # Hardcoded for now:
-    control['final_time'] = 1.0
+    #control['final_time'] = 1.0
     if control['outFileStem'] is None: control['outFileStem'] = ''
     solver = control['solver']
 
@@ -21,27 +21,17 @@ def main(control):
     ICs = cyclops_base.read_ICs(control, control['filename'])
     truth = ICs
 
+    print("H_naught = {}".format(control['H_naught']))
+
     st = SpectralToolbox(control['Nx'], control['Lx'])
-    if solver == 'coarse_propagator':
-        control['HMM_M_bar_M'] = int(50*control['HMM_T0_M'])
-        control['HMM_M_bar_L'] = int(50*control['HMM_T0_L'])
-
-        expInt_g = ExpInt_Gravitational(control)
-        expInt_m = expM(control, None, expInt_g)
-
-        expInt = (expInt_m, expInt_g)
-    else:
-        expInt = ExponentialIntegrator_Dim(control)
-
     metrics = rswe_metrics.Metrics()
-
 
     # Set up initial (truth) field
     ICs = cyclops_base.read_ICs(control, control['filename'])
     truth = ICs
 
     st = SpectralToolbox(control['Nx'], control['Lx'])
-    expInt = ExponentialIntegrator_Dim(control)
+    expInt = ExponentialIntegrator_FullEqs(control)
 
     metrics = rswe_metrics.Metrics()
 

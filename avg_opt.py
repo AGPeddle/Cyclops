@@ -33,14 +33,13 @@ def main(control):
     rank = comm.Get_rank()
     size = comm.Get_size()
 
+    if control['outFileStem'] is None: control['outFileStem'] = ''
+
     if rank != 0:
         i_g = int((rank - 1) / np.sqrt(size - 1))
         i_m = int((rank - 1) % np.sqrt(size - 1))
 
     # Hardcoded for now:
-    control['coarse_timestep'] = 0.01
-    control['final_time'] = 0.1
-    control['Nt'] = 4
     N_avg_g = np.sqrt(size - 1)
     N_avg_m = np.sqrt(size - 1)
 
@@ -59,22 +58,25 @@ def main(control):
         for i in range(control['Nt']):
             truth[i + 1, :, :, :] = RSWE_direct.solve('fine_propagator', control, st, expInt, truth[i, :, :, :])
 
-        with open("avg_opt_fine.dat", "wb") as f:
-            pickle.dump(truth,f)
+        with open("{}avg_opt_fine.dat".format(control['outFileStem']), "wb") as f:
+            truth_out = truth
+            for i in range(control['Nt'] + 1):
+                truth_out[i,2,:,:] = cyclops_base.inv_geopotential_transform(control, truth_out[i,2,:,:])
+            pickle.dump(truth_out,f)
 
     else:
-        if True:  # Grav-dominated
-            expInt_L = ExpInt_Gravitational(control)
-            Kop = make_Lop_rot(control)
-        else:  # Rotation-dominated
+        if control['rot_stiff']:  # Rot-dominated
             expInt_L = ExpInt_Rotational(control)
             Kop = make_Lop_grav(control)
+        else:  # Grav-dominated
+            expInt_L = ExpInt_Gravitational(control)
+            Kop = make_Lop_rot(control)
 
-        control['HMM_T0_M'] = control['coarse_timestep']*(i_m + 1)  # /N_avg_m
-        control['HMM_M_bar_M'] = max(25, int(80*control['HMM_T0_M']))
+        control['HMM_T0_M'] = 0.1*control['coarse_timestep']*(i_m + 1)  # /N_avg_m
+        control['HMM_M_bar_M'] = max(10, int(80*control['HMM_T0_M']))
 
-        control['HMM_T0_L'] = control['coarse_timestep']*(i_g + 1)  # /N_avg_g
-        control['HMM_M_bar_L'] = max(25, int(80*control['HMM_T0_L']))
+        control['HMM_T0_L'] = 0.1*control['coarse_timestep']*(i_g + 1)  # /N_avg_g
+        control['HMM_M_bar_L'] = max(10, int(80*control['HMM_T0_L']))
 
         expInt_m = expM(control, expInt_L, Kop)
         expInt = (expInt_m, expInt_L)
@@ -86,8 +88,11 @@ def main(control):
         for i in range(control['Nt']):
             test[i + 1, :, :, :] = RSWE_direct.solve('coarse_propagator', control, st, expInt, test[i, :, :, :])
 
-        with open("avg_opt_{}_{}.dat".format(i_m, i_g), "wb") as f:
-            pickle.dump(test,f)
+        with open("{}avg_opt_{}_{}.dat".format(control['outFileStem'], i_m, i_g), "wb") as f:
+            test_out = test
+            for i in range(control['Nt'] + 1):
+                test_out[i,2,:,:] = cyclops_base.inv_geopotential_transform(control, test_out[i,2,:,:])
+            pickle.dump(test_out,f)
 
     comm.Barrier()
     for i_rank in range(1, size):
@@ -104,12 +109,10 @@ def main(control):
 
             errs[i_m, i_g] = P_integrate(control, truth[:,2,:,:], test[:,2,:,:])
 
-            with open("avg_opt_{}_{}_recvd.dat".format(i_m, i_g), "wb") as f:
-                pickle.dump(test,f)
         comm.Barrier()
 
     if rank == 0:
-        with open("avg_tests.dat", 'wb') as f:
+        with open("{}avg_tests.dat".format(control['outFileStem']), 'wb') as f:
             pickle.dump(errs, f)
 
 if __name__ == "__main__":
