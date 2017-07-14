@@ -1,5 +1,5 @@
 Cyclops
 =======
 
-.. automodule:: cyclops
+.. automodule:: cyclops_main
    :members:
