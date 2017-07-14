@@ -39,7 +39,9 @@ from mpi4py import MPI
 
 def main(control):
     """
-
+    Main program. Exposes the Parareal algorithm. Sub-algos are encapsulated in
+    the rswe_direct and rswe_exponential_integrator modules. All control is
+    through the control object.
     """
 
     print(control['working_dir'])
