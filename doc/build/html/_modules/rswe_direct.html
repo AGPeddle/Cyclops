@@ -1,0 +1,463 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>rswe_direct &#8212; Cyclops 1.0 documentation</title>
+    
+    <link rel="stylesheet" href="../_static/alabaster.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true,
+        SOURCELINK_SUFFIX: '.txt'
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.0/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+   
+  <link rel="stylesheet" href="../_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head>
+  <body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for rswe_direct</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/env/ python3</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Module to handle the generic solvers for the RSWE. The point of</span>
+<span class="sd">access is through the solve function.</span>
+
+<span class="sd">Functions</span>
+<span class="sd">---------</span>
+<span class="sd">- `fine_propagator` -- computes the full (unaveraged) RSWE by Strang splitting</span>
+<span class="sd">- `coarse_propagator` -- access point for averaged RSWE timestepping</span>
+<span class="sd">- `dissipative_exponential` -- (hyper)viscosity operator</span>
+<span class="sd">- `exp_L_exp_D` -- exponentiated sum of linear terms (advective and dissipative)</span>
+<span class="sd">- `strang_splitting` -- generic strang splitting method</span>
+<span class="sd">- `compute_nonlinear` -- computes the nonlinear terms for the perturbed RSWE</span>
+<span class="sd">- `filter_kernel_exp` -- provides a normalised exponential kernel of integration</span>
+<span class="sd">- `compute_average_force` -- computes the averaged nonlinearity (RHS)</span>
+<span class="sd">- `solve` -- point of access for this library</span>
+
+<span class="sd">| Authors: Adam G. Peddle, Terry Haut</span>
+<span class="sd">| Contact: ap553@exeter.ac.uk</span>
+<span class="sd">| Version: 1.0</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+
+<span class="k">class</span> <span class="nc">Solvers</span><span class="p">:</span>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">fine_propagator</span><span class="p">(</span><span class="n">control</span><span class="p">,</span> <span class="n">expInt</span><span class="p">,</span> <span class="n">st</span><span class="p">,</span> <span class="n">U_hat</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Implements the fine propagator used in the APinT or Parareal methods. Can handle</span>
+<span class="sd">        any implemented methods for the linear and nonlinear operator. Calls through to</span>
+<span class="sd">        appropriate methods.</span>
+
+<span class="sd">        The full range of fine timesteps is taken in this module from the previous to the</span>
+<span class="sd">        next coarse timestep. Only the solution corresponding to the desired coarse timestep</span>
+<span class="sd">        is returned; all others are discarded.</span>
+
+<span class="sd">        **Parameters**</span>
+
+<span class="sd">        - `control` : control object</span>
+<span class="sd">        - `expInt` : appropriate exponential integrator</span>
+<span class="sd">        - `st` : spectral toolbox objecy</span>
+<span class="sd">        - `U_hat` : the solution at the current timestep</span>
+
+<span class="sd">        **Returns**</span>
+
+<span class="sd">        - `U_hat_new` : the solution at the next timestep</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="n">U_hat_new</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">shape</span><span class="p">(</span><span class="n">U_hat</span><span class="p">),</span> <span class="n">dtype</span> <span class="o">=</span> <span class="s1">&#39;complex&#39;</span><span class="p">)</span>
+        <span class="n">U_hat_old</span> <span class="o">=</span> <span class="n">U_hat</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+        <span class="n">t</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">while</span> <span class="n">t</span> <span class="o">&lt;</span> <span class="n">control</span><span class="p">[</span><span class="s1">&#39;final_time&#39;</span><span class="p">]:</span>
+            <span class="c1"># limit fine timestep size to avoid overshooting the last timestep</span>
+            <span class="n">dt</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">control</span><span class="p">[</span><span class="s1">&#39;fine_timestep&#39;</span><span class="p">],</span> <span class="n">control</span><span class="p">[</span><span class="s1">&#39;final_time&#39;</span><span class="p">]</span><span class="o">-</span><span class="n">t</span><span class="p">)</span>
+
+            <span class="n">U_hat_new</span> <span class="o">=</span> <span class="n">strang_splitting</span><span class="p">(</span><span class="n">U_hat_old</span><span class="p">,</span> <span class="n">dt</span><span class="p">,</span> <span class="n">control</span><span class="p">,</span> <span class="n">expInt</span><span class="p">,</span> <span class="n">st</span><span class="p">,</span> <span class="n">exp_L_exp_D</span><span class="p">,</span> <span class="n">compute_nonlinear</span><span class="p">)</span>
+
+            <span class="n">U_hat_old</span> <span class="o">=</span> <span class="n">U_hat_new</span>
+            <span class="n">t</span> <span class="o">+=</span> <span class="n">dt</span>
+
+        <span class="k">return</span> <span class="n">U_hat_new</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">coarse_propagator</span><span class="p">(</span><span class="n">control</span><span class="p">,</span> <span class="n">expInt</span><span class="p">,</span> <span class="n">st</span><span class="p">,</span> <span class="n">U_hat</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Implements the coarse propagator used in the APinT method. Can handle any implemented methods</span>
+<span class="sd">        for the linear and nonlinear operator. Calls through to appropriate methods. Differs from the</span>
+<span class="sd">        non_asymptotic version in its call to the average force computation.</span>
+
+<span class="sd">        **Parameters**</span>
+
+<span class="sd">        - `control` : control object</span>
+<span class="sd">        - `expInt` : appropriate exponential integrator</span>
+<span class="sd">        - `st` : spectral toolbox objecy</span>
+<span class="sd">        - `U_hat` : the solution at the current timestep</span>
+
+<span class="sd">        **Returns**</span>
+
+<span class="sd">        - `U_hat_new` : the solution at the next timestep</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">U_hat_old</span> <span class="o">=</span> <span class="n">U_hat</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="n">t</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">while</span> <span class="n">t</span> <span class="o">&lt;</span> <span class="n">control</span><span class="p">[</span><span class="s1">&#39;final_time&#39;</span><span class="p">]:</span>
+            <span class="c1"># limit fine timestep size to avoid overshooting the last timestep</span>
+            <span class="n">dt</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">control</span><span class="p">[</span><span class="s1">&#39;coarse_timestep&#39;</span><span class="p">],</span> <span class="n">control</span><span class="p">[</span><span class="s1">&#39;final_time&#39;</span><span class="p">]</span><span class="o">-</span><span class="n">t</span><span class="p">)</span>
+
+            <span class="c1"># Compute slow solution</span>
+            <span class="n">U_hat_new</span> <span class="o">=</span> <span class="n">strang_splitting</span><span class="p">(</span><span class="n">U_hat_old</span><span class="p">,</span> <span class="n">dt</span><span class="p">,</span> <span class="n">control</span><span class="p">,</span> <span class="n">expInt</span><span class="p">,</span> <span class="n">st</span><span class="p">,</span> <span class="n">dissipative_exponential</span><span class="p">,</span> <span class="n">compute_average_force</span><span class="p">)</span>
+
+            <span class="c1"># Project back to fullspace with exponential operator</span>
+            <span class="n">U_hat_new</span> <span class="o">=</span> <span class="n">expInt</span><span class="o">.</span><span class="n">call</span><span class="p">(</span><span class="n">U_hat_new</span><span class="p">,</span> <span class="n">dt</span><span class="p">)</span>
+
+            <span class="n">U_hat_old</span> <span class="o">=</span> <span class="n">U_hat_new</span>
+            <span class="n">t</span> <span class="o">+=</span> <span class="n">dt</span>
+
+        <span class="k">return</span> <span class="n">U_hat_new</span>
+
+
+<span class="c1">########## BEGIN SOLVER (SUB) ROUTINES ##########</span>
+
+<div class="viewcode-block" id="dissipative_exponential"><a class="viewcode-back" href="../rswe_direct.html#rswe_direct.dissipative_exponential">[docs]</a><span class="k">def</span> <span class="nf">dissipative_exponential</span><span class="p">(</span><span class="n">control</span><span class="p">,</span> <span class="n">expInt</span><span class="p">,</span> <span class="n">U_hat</span><span class="p">,</span> <span class="n">t</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Implements dissipation through a 4th-order hyperviscosity operator</span>
+<span class="sd">    and matrix exponential.</span>
+
+<span class="sd">    **Parameters**</span>
+
+<span class="sd">    - `control` : control object</span>
+<span class="sd">    - `expInt` : exponential integrator for linear term</span>
+<span class="sd">    - `U_hat` : the known solution at the current timestep</span>
+<span class="sd">    - `t` : the timestep taken</span>
+
+<span class="sd">    **Returns**</span>
+
+<span class="sd">    - `U_hat_sp` : The solution at the next timestep by dissipation</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">kc</span> <span class="o">=</span> <span class="mi">21</span>  <span class="c1"># Normalisation regardless of grid-scale</span>
+    <span class="n">U_hat_sp</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="n">control</span><span class="p">[</span><span class="s1">&#39;Nx&#39;</span><span class="p">],</span> <span class="n">control</span><span class="p">[</span><span class="s1">&#39;Nx&#39;</span><span class="p">]),</span> <span class="n">dtype</span> <span class="o">=</span> <span class="s1">&#39;complex&#39;</span><span class="p">)</span>
+    <span class="n">wavenumbers_x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="o">-</span><span class="n">control</span><span class="p">[</span><span class="s1">&#39;Nx&#39;</span><span class="p">]</span><span class="o">/</span><span class="mi">2</span><span class="p">,</span> <span class="n">control</span><span class="p">[</span><span class="s1">&#39;Nx&#39;</span><span class="p">]</span><span class="o">/</span><span class="mi">2</span><span class="p">)</span><span class="o">/</span><span class="n">kc</span>
+    <span class="n">wavenumbers_y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="o">-</span><span class="n">control</span><span class="p">[</span><span class="s1">&#39;Nx&#39;</span><span class="p">]</span><span class="o">/</span><span class="mi">2</span><span class="p">,</span> <span class="n">control</span><span class="p">[</span><span class="s1">&#39;Nx&#39;</span><span class="p">]</span><span class="o">/</span><span class="mi">2</span><span class="p">)</span><span class="o">/</span><span class="n">kc</span>
+
+    <span class="n">wavenums_x</span><span class="p">,</span> <span class="n">wavenums_y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">wavenumbers_x</span><span class="p">,</span> <span class="n">wavenumbers_y</span><span class="p">)</span>
+
+    <span class="n">p</span> <span class="o">=</span> <span class="mi">8</span>  <span class="c1"># 4-th order is nabla^8, a.k.a. delta^4</span>
+    <span class="n">exp_D</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="n">control</span><span class="p">[</span><span class="s1">&#39;mu&#39;</span><span class="p">]</span><span class="o">*</span><span class="n">t</span><span class="o">*</span><span class="p">(</span><span class="n">wavenums_x</span><span class="o">**</span><span class="n">p</span> <span class="o">+</span> <span class="n">wavenums_y</span><span class="o">**</span><span class="n">p</span><span class="p">))</span>
+    <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">):</span>
+        <span class="n">U_hat_sp</span><span class="p">[</span><span class="n">k</span><span class="p">,:,:]</span> <span class="o">=</span> <span class="n">exp_D</span><span class="o">*</span><span class="n">U_hat</span><span class="p">[</span><span class="n">k</span><span class="p">,:,:]</span>
+    <span class="k">return</span> <span class="n">U_hat_sp</span></div>
+
+<div class="viewcode-block" id="exp_L_exp_D"><a class="viewcode-back" href="../rswe_direct.html#rswe_direct.exp_L_exp_D">[docs]</a><span class="k">def</span> <span class="nf">exp_L_exp_D</span><span class="p">(</span><span class="n">control</span><span class="p">,</span> <span class="n">expInt</span><span class="p">,</span> <span class="n">U_hat</span><span class="p">,</span> <span class="n">t</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Call-through method for applying the linear solution</span>
+<span class="sd">    and the dissipative term. (Both via exponential integrator)</span>
+
+<span class="sd">    **Parameters**</span>
+
+<span class="sd">    - `control` : control object</span>
+<span class="sd">    - `expInt` : exponential integrator for linear term</span>
+<span class="sd">    - `U_hat` : the known solution at the current timestep</span>
+<span class="sd">    - `t` : the timestep taken</span>
+
+<span class="sd">    **Returns**</span>
+
+<span class="sd">    - `U_hat_sp` : The solution propagated by L and D</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">U_hat_sp</span> <span class="o">=</span> <span class="n">expInt</span><span class="o">.</span><span class="n">call</span><span class="p">(</span><span class="n">U_hat</span><span class="p">,</span> <span class="n">t</span><span class="p">)</span>
+    <span class="n">U_hat_sp</span> <span class="o">=</span> <span class="n">dissipative_exponential</span><span class="p">(</span><span class="n">control</span><span class="p">,</span> <span class="n">expInt</span><span class="p">,</span> <span class="n">U_hat_sp</span><span class="p">,</span> <span class="n">t</span><span class="p">)</span>  <span class="c1"># Dissipative term</span>
+    <span class="k">return</span> <span class="n">U_hat_sp</span></div>
+
+<div class="viewcode-block" id="strang_splitting"><a class="viewcode-back" href="../rswe_direct.html#rswe_direct.strang_splitting">[docs]</a><span class="k">def</span> <span class="nf">strang_splitting</span><span class="p">(</span><span class="n">U_hat</span><span class="p">,</span> <span class="n">delta_t</span><span class="p">,</span> <span class="n">control</span><span class="p">,</span> <span class="n">expInt</span><span class="p">,</span> <span class="n">st</span><span class="p">,</span> <span class="n">linear</span><span class="p">,</span> <span class="n">nonlinear</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Propagates a solution for arbitrary linear and nonlinear operators over a timestep</span>
+<span class="sd">    delta_t by using Strang Splitting.</span>
+
+<span class="sd">    **Parameters**</span>
+
+<span class="sd">    - `U_hat` : The known solution at the current timestep, in Fourier space</span>
+<span class="sd">    - `delta_t` : the timestep over which the solution is to be predicted</span>
+<span class="sd">    - `control` : the control object</span>
+<span class="sd">    - `expInt` : the exponential integrator (linear term)</span>
+<span class="sd">    - `st` : spectral toolbox object</span>
+<span class="sd">    - `linear` : the linear term. May be the same as expInt, but necessary</span>
+<span class="sd">                 for integration with exp_L_exp_D</span>
+<span class="sd">    - `nonlinear` : the nonlinear operator being used, i.e. with or without wave averaging</span>
+
+<span class="sd">    **Returns**</span>
+
+<span class="sd">    - `U_hat_new` : The computed U_hat at the next timestep</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">U_hat_new</span> <span class="o">=</span> <span class="n">linear</span><span class="p">(</span><span class="n">control</span><span class="p">,</span> <span class="n">expInt</span><span class="p">,</span> <span class="n">U_hat</span><span class="p">,</span> <span class="mf">0.5</span><span class="o">*</span><span class="n">delta_t</span><span class="p">)</span>
+    <span class="c1"># Computation of midpoint:</span>
+    <span class="n">U_NL_hat</span> <span class="o">=</span> <span class="n">nonlinear</span><span class="p">(</span><span class="n">U_hat_new</span><span class="p">,</span> <span class="n">control</span><span class="p">,</span> <span class="n">st</span><span class="p">,</span> <span class="n">expInt</span><span class="p">)</span>
+    <span class="n">U_NL_hat1</span> <span class="o">=</span> <span class="o">-</span><span class="n">delta_t</span><span class="o">*</span><span class="n">U_NL_hat</span>
+
+    <span class="n">U_NL_hat</span> <span class="o">=</span> <span class="n">nonlinear</span><span class="p">(</span><span class="n">U_hat_new</span> <span class="o">+</span> <span class="mf">0.5</span><span class="o">*</span><span class="n">U_NL_hat1</span><span class="p">,</span> <span class="n">control</span><span class="p">,</span> <span class="n">st</span><span class="p">,</span> <span class="n">expInt</span><span class="p">)</span>
+    <span class="n">U_NL_hat2</span> <span class="o">=</span> <span class="o">-</span><span class="n">delta_t</span><span class="o">*</span><span class="n">U_NL_hat</span>
+    <span class="n">U_hat_new</span> <span class="o">=</span> <span class="n">U_hat_new</span> <span class="o">+</span> <span class="n">U_NL_hat2</span>
+
+    <span class="n">U_hat_new</span> <span class="o">=</span> <span class="n">linear</span><span class="p">(</span><span class="n">control</span><span class="p">,</span> <span class="n">expInt</span><span class="p">,</span> <span class="n">U_hat_new</span><span class="p">,</span> <span class="mf">0.5</span><span class="o">*</span><span class="n">delta_t</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">U_hat_new</span></div>
+
+<div class="viewcode-block" id="compute_nonlinear"><a class="viewcode-back" href="../rswe_direct.html#rswe_direct.compute_nonlinear">[docs]</a><span class="k">def</span> <span class="nf">compute_nonlinear</span><span class="p">(</span><span class="n">U_hat</span><span class="p">,</span> <span class="n">control</span><span class="p">,</span> <span class="n">st</span><span class="p">,</span> <span class="n">expInt</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Function to compute the nonlinear terms of the RSWE. Calls through to some</span>
+<span class="sd">    spectral toolbox methods to implement derivatives and nonlinear multiplication.</span>
+
+<span class="sd">    This function implements the simple solution to the problem, with none of the wave averaging.</span>
+
+<span class="sd">    **Parameters**</span>
+<span class="sd">    - `U_hat` : the components of the unknown vector in Fourier space, ordered u, v, h</span>
+<span class="sd">    - `control` : control object</span>
+<span class="sd">    - `st` : spectral toolbox object</span>
+<span class="sd">    - `expInt` : exponential integrator object</span>
+
+<span class="sd">    **Returns**</span>
+<span class="sd">    - `U_NL_hat` : the result of the multiplication in Fourier space</span>
+
+<span class="sd">    **See Also**</span>
+<span class="sd">    compute_average_force</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">N1</span><span class="p">,</span> <span class="n">N2</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">shape</span><span class="p">(</span><span class="n">U_hat</span><span class="p">)[</span><span class="mi">1</span><span class="p">::]</span>
+    <span class="n">U_NL_hat</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span><span class="n">N1</span><span class="p">,</span><span class="n">N2</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="s1">&#39;complex&#39;</span><span class="p">)</span>
+
+    <span class="n">v1_hat</span> <span class="o">=</span> <span class="n">U_hat</span><span class="p">[</span><span class="mi">0</span><span class="p">,:,:]</span>
+    <span class="n">v2_hat</span> <span class="o">=</span> <span class="n">U_hat</span><span class="p">[</span><span class="mi">1</span><span class="p">,:,:]</span>
+    <span class="n">h_hat</span> <span class="o">=</span> <span class="n">U_hat</span><span class="p">[</span><span class="mi">2</span><span class="p">,:,:]</span>
+
+    <span class="c1"># x and y derivatives of u</span>
+    <span class="n">v1_x_hat</span> <span class="o">=</span> <span class="n">st</span><span class="o">.</span><span class="n">calc_derivative</span><span class="p">(</span><span class="n">v1_hat</span><span class="p">,</span> <span class="s1">&#39;x&#39;</span><span class="p">)</span>
+    <span class="n">v1_y_hat</span> <span class="o">=</span> <span class="n">st</span><span class="o">.</span><span class="n">calc_derivative</span><span class="p">(</span><span class="n">v1_hat</span><span class="p">,</span> <span class="s1">&#39;y&#39;</span><span class="p">)</span>
+
+    <span class="c1"># x and y derivatives of v</span>
+    <span class="n">v2_x_hat</span> <span class="o">=</span> <span class="n">st</span><span class="o">.</span><span class="n">calc_derivative</span><span class="p">(</span><span class="n">v2_hat</span><span class="p">,</span> <span class="s1">&#39;x&#39;</span><span class="p">)</span>
+    <span class="n">v2_y_hat</span> <span class="o">=</span> <span class="n">st</span><span class="o">.</span><span class="n">calc_derivative</span><span class="p">(</span><span class="n">v2_hat</span><span class="p">,</span> <span class="s1">&#39;y&#39;</span><span class="p">)</span>
+
+    <span class="c1"># Compute Fourier coefficients of v1 * v1_x1 + v2 * v1_x2</span>
+    <span class="n">U_NL_hat1</span> <span class="o">=</span> <span class="n">st</span><span class="o">.</span><span class="n">multiply_nonlinear</span><span class="p">(</span><span class="n">v1_x_hat</span><span class="p">,</span> <span class="n">v1_hat</span><span class="p">)</span>
+    <span class="n">U_NL_hat2</span> <span class="o">=</span> <span class="n">st</span><span class="o">.</span><span class="n">multiply_nonlinear</span><span class="p">(</span><span class="n">v1_y_hat</span><span class="p">,</span> <span class="n">v2_hat</span><span class="p">)</span>
+    <span class="n">U_NL_hat</span><span class="p">[</span><span class="mi">0</span><span class="p">,:,:]</span> <span class="o">=</span> <span class="n">U_NL_hat1</span> <span class="o">+</span> <span class="n">U_NL_hat2</span>
+
+    <span class="c1"># Compute Fourier coefficients of  v1 * v2_x1 + v2 * v2_x2</span>
+    <span class="n">U_NL_hat1</span> <span class="o">=</span> <span class="n">st</span><span class="o">.</span><span class="n">multiply_nonlinear</span><span class="p">(</span><span class="n">v2_x_hat</span><span class="p">,</span> <span class="n">v1_hat</span><span class="p">)</span>
+    <span class="n">U_NL_hat2</span> <span class="o">=</span> <span class="n">st</span><span class="o">.</span><span class="n">multiply_nonlinear</span><span class="p">(</span><span class="n">v2_y_hat</span><span class="p">,</span> <span class="n">v2_hat</span><span class="p">)</span>
+    <span class="n">U_NL_hat</span><span class="p">[</span><span class="mi">1</span><span class="p">,:,:]</span> <span class="o">=</span> <span class="n">U_NL_hat1</span> <span class="o">+</span> <span class="n">U_NL_hat2</span>
+
+    <span class="c1"># Compute Fourier coefficients of (h*v1)_x1 + (h*v2)_x2</span>
+    <span class="n">U_NL_hat1</span> <span class="o">=</span> <span class="n">st</span><span class="o">.</span><span class="n">multiply_nonlinear</span><span class="p">(</span><span class="n">h_hat</span><span class="p">,</span> <span class="n">v1_hat</span><span class="p">)</span>
+    <span class="n">U_NL_hat1</span> <span class="o">=</span> <span class="n">st</span><span class="o">.</span><span class="n">calc_derivative</span><span class="p">(</span><span class="n">U_NL_hat1</span><span class="p">,</span> <span class="s1">&#39;x&#39;</span><span class="p">)</span>
+    <span class="n">U_NL_hat2</span> <span class="o">=</span> <span class="n">st</span><span class="o">.</span><span class="n">multiply_nonlinear</span><span class="p">(</span><span class="n">h_hat</span><span class="p">,</span> <span class="n">v2_hat</span><span class="p">)</span>
+    <span class="n">U_NL_hat2</span> <span class="o">=</span> <span class="n">st</span><span class="o">.</span><span class="n">calc_derivative</span><span class="p">(</span><span class="n">U_NL_hat2</span><span class="p">,</span> <span class="s1">&#39;y&#39;</span><span class="p">)</span>
+    <span class="n">U_NL_hat</span><span class="p">[</span><span class="mi">2</span><span class="p">,:,:]</span> <span class="o">=</span> <span class="n">U_NL_hat1</span> <span class="o">+</span> <span class="n">U_NL_hat2</span>
+
+    <span class="k">return</span> <span class="n">U_NL_hat</span></div>
+
+<span class="c1">########## END SOLVER (SUB) ROUTINES ##########</span>
+
+<span class="c1">########## BEGIN WAVE AVERAGING ROUTINES ##########</span>
+
+<div class="viewcode-block" id="filter_kernel_exp"><a class="viewcode-back" href="../rswe_direct.html#rswe_direct.filter_kernel_exp">[docs]</a><span class="k">def</span> <span class="nf">filter_kernel_exp</span><span class="p">(</span><span class="n">M</span><span class="p">,</span> <span class="n">s</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Smooth integration kernel.</span>
+
+<span class="sd">    This kernel is used for the integration over the fast waves. It is</span>
+<span class="sd">    formulated as:</span>
+
+<span class="sd">    .. math:: \\rho(s) \\approx \\exp(-50*(s-0.5)^{2})</span>
+
+<span class="sd">    and is normalised to have a total integral of unity. This method is</span>
+<span class="sd">    used for the wave averaging, which is performed by `self.compute_average_force`.</span>
+
+<span class="sd">    **Parameters**</span>
+
+<span class="sd">    - `M` : The interval over which the average is to be computed</span>
+<span class="sd">    - `s` : The sample in the interval</span>
+
+<span class="sd">    **Returns**</span>
+
+<span class="sd">    The computed kernel value at s.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">points</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">M</span><span class="p">)</span><span class="o">/</span><span class="nb">float</span><span class="p">(</span><span class="n">M</span><span class="p">)</span>
+    <span class="n">norm</span> <span class="o">=</span> <span class="p">(</span><span class="mf">1.0</span><span class="o">/</span><span class="nb">float</span><span class="p">(</span><span class="n">M</span><span class="p">))</span><span class="o">*</span><span class="nb">sum</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="mi">50</span><span class="o">*</span><span class="p">(</span><span class="n">points</span> <span class="o">-</span> <span class="mf">0.5</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="mi">50</span><span class="o">*</span><span class="p">(</span><span class="n">s</span><span class="o">-</span><span class="mf">0.5</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span><span class="o">/</span><span class="n">norm</span></div>
+
+<div class="viewcode-block" id="compute_average_force"><a class="viewcode-back" href="../rswe_direct.html#rswe_direct.compute_average_force">[docs]</a><span class="k">def</span> <span class="nf">compute_average_force</span><span class="p">(</span><span class="n">U_hat</span><span class="p">,</span> <span class="n">control</span><span class="p">,</span> <span class="n">st</span><span class="p">,</span> <span class="n">expInt</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    This method computed the wave-averaged solution for use with the APinT</span>
+<span class="sd">    coarse timestepping.</span>
+
+<span class="sd">    The equation solved by this method is a modified equation for a slowly-varying</span>
+<span class="sd">    solution (see module header, above). The equation solved is:</span>
+
+<span class="sd">    .. math:: \\bar{N}(\\bar{u}) = \\sum \\limits_{m=0}^{M-1} \\rho(s/T_{0})e^{sL}N(e^{-sL}\\bar{u}(t))</span>
+
+<span class="sd">    where :math:`\\rho` is the smoothing kernel (`filter_kernel`).</span>
+
+<span class="sd">    **Parameters**</span>
+
+<span class="sd">    - `U_hat` : the known solution at the current timestep</span>
+<span class="sd">    - `control` : control object</span>
+<span class="sd">    - `st` : spectral toolbox object</span>
+<span class="sd">    - `expInt` : exponential integrator for linear term</span>
+
+<span class="sd">    **Returns**</span>
+
+<span class="sd">    - `U_hat_averaged` : The predicted averaged solution at the next timestep</span>
+
+<span class="sd">    **Notes**</span>
+
+<span class="sd">    The smooth kernel is chosen so that the length of the time window over which the averaging is</span>
+<span class="sd">    performed is as small as possible and the error from the trapezoidal rule is as small as possible.</span>
+
+<span class="sd">    *See Also**</span>
+<span class="sd">    `filter_kernel`</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">T0</span> <span class="o">=</span> <span class="n">control</span><span class="p">[</span><span class="s1">&#39;HMM_T0&#39;</span><span class="p">]</span>
+    <span class="n">M</span> <span class="o">=</span> <span class="n">control</span><span class="p">[</span><span class="s1">&#39;HMM_M_bar&#39;</span><span class="p">]</span>
+    <span class="n">filter_kernel</span> <span class="o">=</span> <span class="n">filter_kernel_exp</span>
+
+    <span class="n">U_hat_NL_averaged</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">shape</span><span class="p">(</span><span class="n">U_hat</span><span class="p">),</span> <span class="n">dtype</span> <span class="o">=</span> <span class="s1">&#39;complex&#39;</span><span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="n">M</span><span class="p">):</span>  <span class="c1"># NB This loop is embarassingly parallelisable (on its own)</span>
+        <span class="n">tm</span> <span class="o">=</span> <span class="n">T0</span><span class="o">*</span><span class="n">m</span><span class="o">/</span><span class="nb">float</span><span class="p">(</span><span class="n">M</span><span class="p">)</span>
+        <span class="n">Km</span> <span class="o">=</span> <span class="n">filter_kernel</span><span class="p">(</span><span class="n">M</span><span class="p">,</span> <span class="n">m</span><span class="o">/</span><span class="nb">float</span><span class="p">(</span><span class="n">M</span><span class="p">))</span>
+
+        <span class="n">U_hat_RHS</span> <span class="o">=</span> <span class="n">expInt</span><span class="o">.</span><span class="n">call</span><span class="p">(</span><span class="n">U_hat</span><span class="p">,</span> <span class="n">tm</span><span class="p">)</span>
+        <span class="n">U_hat_RHS</span> <span class="o">=</span> <span class="n">compute_nonlinear</span><span class="p">(</span><span class="n">U_hat_RHS</span><span class="p">,</span> <span class="n">control</span><span class="p">,</span> <span class="n">st</span><span class="p">)</span>
+        <span class="n">U_hat_RHS</span> <span class="o">=</span> <span class="n">expInt</span><span class="o">.</span><span class="n">call</span><span class="p">(</span><span class="n">U_hat_RHS</span><span class="p">,</span> <span class="o">-</span><span class="n">tm</span><span class="p">)</span>
+
+        <span class="n">U_hat_NL_averaged</span> <span class="o">+=</span> <span class="n">Km</span><span class="o">*</span><span class="n">U_hat_RHS</span>
+
+    <span class="k">return</span> <span class="n">U_hat_NL_averaged</span><span class="o">/</span><span class="nb">float</span><span class="p">(</span><span class="n">M</span><span class="p">)</span></div>
+
+<span class="c1">########## END WAVE AVERAGING ROUTINES ##########</span>
+
+<div class="viewcode-block" id="solve"><a class="viewcode-back" href="../rswe_direct.html#rswe_direct.solve">[docs]</a><span class="k">def</span> <span class="nf">solve</span><span class="p">(</span><span class="n">solver_name</span><span class="p">,</span> <span class="n">control</span><span class="p">,</span> <span class="n">st</span><span class="p">,</span> <span class="n">expInt</span><span class="p">,</span> <span class="n">u_init</span><span class="p">,</span> <span class="n">invert_fft</span> <span class="o">=</span> <span class="kc">True</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Main point of access for the RSWE solver library. Handles either real-space</span>
+<span class="sd">    input or Fourier-space input via the ivnert_fft flag.</span>
+
+<span class="sd">    **Parameters**</span>
+
+<span class="sd">    - `solver_name` : string &#39;fine_propagator&#39; or &#39;coarse_propagator&#39; to</span>
+<span class="sd">                      toggle solvers</span>
+<span class="sd">    - `control` : control object</span>
+<span class="sd">    - `st` : spectral toolbox objecy</span>
+<span class="sd">    - `expInt` : appropriate exponential integrator (contructed externally for speed)</span>
+<span class="sd">    - `u_init` : the solution at the current timestep, i.e. initial condition</span>
+<span class="sd">    - `invert_fft` : flag to switch on FFT-ing. True if u_init is in realspace</span>
+
+<span class="sd">    **Returns**</span>
+
+<span class="sd">    - `out_sols` : the solution at the right-side of the time interval</span>
+
+<span class="sd">    **Notes**</span>
+
+<span class="sd">    u_init must be a numpy array of size (3, N_x, N_x) with</span>
+<span class="sd">    solution fields along the first rank in the order (u, v, h).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">if</span> <span class="n">invert_fft</span><span class="p">:</span>  <span class="c1"># i.e. initial condition is in realspace</span>
+        <span class="n">out_sols</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="n">control</span><span class="p">[</span><span class="s1">&#39;Nx&#39;</span><span class="p">],</span> <span class="n">control</span><span class="p">[</span><span class="s1">&#39;Nx&#39;</span><span class="p">]),</span> <span class="n">dtype</span> <span class="o">=</span> <span class="s1">&#39;complex&#39;</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">):</span>  <span class="c1"># Transform to Fourier space</span>
+            <span class="n">out_sols</span><span class="p">[</span><span class="n">k</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span> <span class="o">=</span> <span class="n">st</span><span class="o">.</span><span class="n">forward_fft</span><span class="p">(</span><span class="n">u_init</span><span class="p">[</span><span class="n">k</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:])</span>
+
+        <span class="c1"># Solver kernel</span>
+        <span class="n">out_sols</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">Solvers</span><span class="p">,</span> <span class="n">solver_name</span><span class="p">)(</span><span class="n">control</span><span class="p">,</span> <span class="n">expInt</span><span class="p">,</span> <span class="n">st</span><span class="p">,</span> <span class="n">out_sols</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">):</span>  <span class="c1"># Return to realspace</span>
+            <span class="n">out_sols</span><span class="p">[</span><span class="n">k</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span> <span class="o">=</span> <span class="n">st</span><span class="o">.</span><span class="n">inverse_fft</span><span class="p">(</span><span class="n">out_sols</span><span class="p">[</span><span class="n">k</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:])</span>
+
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">real</span><span class="p">(</span><span class="n">out_sols</span><span class="p">)</span>
+
+    <span class="k">else</span><span class="p">:</span>  <span class="c1"># Initial condition is already in Fourier space</span>
+        <span class="c1"># Solver kernel</span>
+        <span class="n">out_sols</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">Solvers</span><span class="p">,</span> <span class="n">solver_name</span><span class="p">)(</span><span class="n">control</span><span class="p">,</span> <span class="n">expInt</span><span class="p">,</span> <span class="n">st</span><span class="p">,</span> <span class="n">u_init</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">out_sols</span></div>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+            <p class="logo"><a href="../index.html">
+              <img class="logo" src="../_static/Cyclops_1.jpg" alt="Logo"/>
+            </a></p><div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../index.html">Documentation overview</a><ul>
+  <li><a href="index.html">Module code</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../search.html" method="get">
+      <div><input type="text" name="q" /></div>
+      <div><input type="submit" value="Go" /></div>
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2017, Adam G Peddle.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 1.6.2</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.9</a>
+      
+    </div>
+
+    
+
+    
+  </body>
+</html>

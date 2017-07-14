@@ -1,0 +1,286 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>RSWE Direct &#8212; Cyclops 1.0 documentation</title>
+    
+    <link rel="stylesheet" href="_static/alabaster.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true,
+        SOURCELINK_SUFFIX: '.txt'
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.0/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Cyclops Base" href="cyclops_base.html" />
+    <link rel="prev" title="Cyclops Control" href="cyclops_control.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head>
+  <body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <div class="section" id="module-rswe_direct">
+<span id="rswe-direct"></span><h1>RSWE Direct<a class="headerlink" href="#module-rswe_direct" title="Permalink to this headline">¶</a></h1>
+<p>Module to handle the generic solvers for the RSWE. The point of
+access is through the solve function.</p>
+<div class="section" id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Permalink to this headline">¶</a></h2>
+<ul class="simple">
+<li><cite>fine_propagator</cite> – computes the full (unaveraged) RSWE by Strang splitting</li>
+<li><cite>coarse_propagator</cite> – access point for averaged RSWE timestepping</li>
+<li><cite>dissipative_exponential</cite> – (hyper)viscosity operator</li>
+<li><cite>exp_L_exp_D</cite> – exponentiated sum of linear terms (advective and dissipative)</li>
+<li><cite>strang_splitting</cite> – generic strang splitting method</li>
+<li><cite>compute_nonlinear</cite> – computes the nonlinear terms for the perturbed RSWE</li>
+<li><cite>filter_kernel_exp</cite> – provides a normalised exponential kernel of integration</li>
+<li><cite>compute_average_force</cite> – computes the averaged nonlinearity (RHS)</li>
+<li><cite>solve</cite> – point of access for this library</li>
+</ul>
+<div class="line-block">
+<div class="line">Authors: Adam G. Peddle, Terry Haut</div>
+<div class="line">Contact: <a class="reference external" href="mailto:ap553&#37;&#52;&#48;exeter&#46;ac&#46;uk">ap553<span>&#64;</span>exeter<span>&#46;</span>ac<span>&#46;</span>uk</a></div>
+<div class="line">Version: 1.0</div>
+</div>
+<dl class="function">
+<dt id="rswe_direct.compute_average_force">
+<code class="descclassname">rswe_direct.</code><code class="descname">compute_average_force</code><span class="sig-paren">(</span><em>U_hat</em>, <em>control</em>, <em>st</em>, <em>expInt</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/rswe_direct.html#compute_average_force"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#rswe_direct.compute_average_force" title="Permalink to this definition">¶</a></dt>
+<dd><p>This method computed the wave-averaged solution for use with the APinT
+coarse timestepping.</p>
+<p>The equation solved by this method is a modified equation for a slowly-varying
+solution (see module header, above). The equation solved is:</p>
+<div class="math">
+\[\bar{N}(\bar{u}) = \sum \limits_{m=0}^{M-1} \rho(s/T_{0})e^{sL}N(e^{-sL}\bar{u}(t))\]</div>
+<p>where <span class="math">\(\rho\)</span> is the smoothing kernel (<cite>filter_kernel</cite>).</p>
+<p><strong>Parameters</strong></p>
+<ul class="simple">
+<li><cite>U_hat</cite> : the known solution at the current timestep</li>
+<li><cite>control</cite> : control object</li>
+<li><cite>st</cite> : spectral toolbox object</li>
+<li><cite>expInt</cite> : exponential integrator for linear term</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul class="simple">
+<li><cite>U_hat_averaged</cite> : The predicted averaged solution at the next timestep</li>
+</ul>
+<p><strong>Notes</strong></p>
+<p>The smooth kernel is chosen so that the length of the time window over which the averaging is
+performed is as small as possible and the error from the trapezoidal rule is as small as possible.</p>
+<p><em>See Also*</em>
+<cite>filter_kernel</cite></p>
+</dd></dl>
+
+<dl class="function">
+<dt id="rswe_direct.compute_nonlinear">
+<code class="descclassname">rswe_direct.</code><code class="descname">compute_nonlinear</code><span class="sig-paren">(</span><em>U_hat</em>, <em>control</em>, <em>st</em>, <em>expInt=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/rswe_direct.html#compute_nonlinear"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#rswe_direct.compute_nonlinear" title="Permalink to this definition">¶</a></dt>
+<dd><p>Function to compute the nonlinear terms of the RSWE. Calls through to some
+spectral toolbox methods to implement derivatives and nonlinear multiplication.</p>
+<p>This function implements the simple solution to the problem, with none of the wave averaging.</p>
+<p><strong>Parameters</strong>
+- <cite>U_hat</cite> : the components of the unknown vector in Fourier space, ordered u, v, h
+- <cite>control</cite> : control object
+- <cite>st</cite> : spectral toolbox object
+- <cite>expInt</cite> : exponential integrator object</p>
+<p><strong>Returns</strong>
+- <cite>U_NL_hat</cite> : the result of the multiplication in Fourier space</p>
+<p><strong>See Also</strong>
+compute_average_force</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="rswe_direct.dissipative_exponential">
+<code class="descclassname">rswe_direct.</code><code class="descname">dissipative_exponential</code><span class="sig-paren">(</span><em>control</em>, <em>expInt</em>, <em>U_hat</em>, <em>t</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/rswe_direct.html#dissipative_exponential"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#rswe_direct.dissipative_exponential" title="Permalink to this definition">¶</a></dt>
+<dd><p>Implements dissipation through a 4th-order hyperviscosity operator
+and matrix exponential.</p>
+<p><strong>Parameters</strong></p>
+<ul class="simple">
+<li><cite>control</cite> : control object</li>
+<li><cite>expInt</cite> : exponential integrator for linear term</li>
+<li><cite>U_hat</cite> : the known solution at the current timestep</li>
+<li><cite>t</cite> : the timestep taken</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul class="simple">
+<li><cite>U_hat_sp</cite> : The solution at the next timestep by dissipation</li>
+</ul>
+</dd></dl>
+
+<dl class="function">
+<dt id="rswe_direct.exp_L_exp_D">
+<code class="descclassname">rswe_direct.</code><code class="descname">exp_L_exp_D</code><span class="sig-paren">(</span><em>control</em>, <em>expInt</em>, <em>U_hat</em>, <em>t</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/rswe_direct.html#exp_L_exp_D"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#rswe_direct.exp_L_exp_D" title="Permalink to this definition">¶</a></dt>
+<dd><p>Call-through method for applying the linear solution
+and the dissipative term. (Both via exponential integrator)</p>
+<p><strong>Parameters</strong></p>
+<ul class="simple">
+<li><cite>control</cite> : control object</li>
+<li><cite>expInt</cite> : exponential integrator for linear term</li>
+<li><cite>U_hat</cite> : the known solution at the current timestep</li>
+<li><cite>t</cite> : the timestep taken</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul class="simple">
+<li><cite>U_hat_sp</cite> : The solution propagated by L and D</li>
+</ul>
+</dd></dl>
+
+<dl class="function">
+<dt id="rswe_direct.filter_kernel_exp">
+<code class="descclassname">rswe_direct.</code><code class="descname">filter_kernel_exp</code><span class="sig-paren">(</span><em>M</em>, <em>s</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/rswe_direct.html#filter_kernel_exp"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#rswe_direct.filter_kernel_exp" title="Permalink to this definition">¶</a></dt>
+<dd><p>Smooth integration kernel.</p>
+<p>This kernel is used for the integration over the fast waves. It is
+formulated as:</p>
+<div class="math">
+\[\rho(s) \approx \exp(-50*(s-0.5)^{2})\]</div>
+<p>and is normalised to have a total integral of unity. This method is
+used for the wave averaging, which is performed by <cite>self.compute_average_force</cite>.</p>
+<p><strong>Parameters</strong></p>
+<ul class="simple">
+<li><cite>M</cite> : The interval over which the average is to be computed</li>
+<li><cite>s</cite> : The sample in the interval</li>
+</ul>
+<p><strong>Returns</strong></p>
+<p>The computed kernel value at s.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="rswe_direct.solve">
+<code class="descclassname">rswe_direct.</code><code class="descname">solve</code><span class="sig-paren">(</span><em>solver_name</em>, <em>control</em>, <em>st</em>, <em>expInt</em>, <em>u_init</em>, <em>invert_fft=True</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/rswe_direct.html#solve"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#rswe_direct.solve" title="Permalink to this definition">¶</a></dt>
+<dd><p>Main point of access for the RSWE solver library. Handles either real-space
+input or Fourier-space input via the ivnert_fft flag.</p>
+<p><strong>Parameters</strong></p>
+<ul class="simple">
+<li><dl class="first docutils">
+<dt><cite>solver_name</cite> <span class="classifier-delimiter">:</span> <span class="classifier">string ‘fine_propagator’ or ‘coarse_propagator’ to</span></dt>
+<dd>toggle solvers</dd>
+</dl>
+</li>
+<li><cite>control</cite> : control object</li>
+<li><cite>st</cite> : spectral toolbox objecy</li>
+<li><cite>expInt</cite> : appropriate exponential integrator (contructed externally for speed)</li>
+<li><cite>u_init</cite> : the solution at the current timestep, i.e. initial condition</li>
+<li><cite>invert_fft</cite> : flag to switch on FFT-ing. True if u_init is in realspace</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul class="simple">
+<li><cite>out_sols</cite> : the solution at the right-side of the time interval</li>
+</ul>
+<p><strong>Notes</strong></p>
+<p>u_init must be a numpy array of size (3, N_x, N_x) with
+solution fields along the first rank in the order (u, v, h).</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="rswe_direct.strang_splitting">
+<code class="descclassname">rswe_direct.</code><code class="descname">strang_splitting</code><span class="sig-paren">(</span><em>U_hat</em>, <em>delta_t</em>, <em>control</em>, <em>expInt</em>, <em>st</em>, <em>linear</em>, <em>nonlinear</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/rswe_direct.html#strang_splitting"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#rswe_direct.strang_splitting" title="Permalink to this definition">¶</a></dt>
+<dd><p>Propagates a solution for arbitrary linear and nonlinear operators over a timestep
+delta_t by using Strang Splitting.</p>
+<p><strong>Parameters</strong></p>
+<ul class="simple">
+<li><cite>U_hat</cite> : The known solution at the current timestep, in Fourier space</li>
+<li><cite>delta_t</cite> : the timestep over which the solution is to be predicted</li>
+<li><cite>control</cite> : the control object</li>
+<li><cite>expInt</cite> : the exponential integrator (linear term)</li>
+<li><cite>st</cite> : spectral toolbox object</li>
+<li><dl class="first docutils">
+<dt><cite>linear</cite> <span class="classifier-delimiter">:</span> <span class="classifier">the linear term. May be the same as expInt, but necessary</span></dt>
+<dd>for integration with exp_L_exp_D</dd>
+</dl>
+</li>
+<li><cite>nonlinear</cite> : the nonlinear operator being used, i.e. with or without wave averaging</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul class="simple">
+<li><cite>U_hat_new</cite> : The computed U_hat at the next timestep</li>
+</ul>
+</dd></dl>
+
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+            <p class="logo"><a href="index.html">
+              <img class="logo" src="_static/Cyclops_1.jpg" alt="Logo"/>
+            </a></p>
+  <h3><a href="index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">RSWE Direct</a><ul>
+<li><a class="reference internal" href="#functions">Functions</a></li>
+</ul>
+</li>
+</ul>
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+      <li>Previous: <a href="cyclops_control.html" title="previous chapter">Cyclops Control</a></li>
+      <li>Next: <a href="cyclops_base.html" title="next chapter">Cyclops Base</a></li>
+  </ul></li>
+</ul>
+</div>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="_sources/rswe_direct.rst.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <div><input type="text" name="q" /></div>
+      <div><input type="submit" value="Go" /></div>
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2017, Adam G Peddle.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 1.6.2</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.9</a>
+      
+      |
+      <a href="_sources/rswe_direct.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

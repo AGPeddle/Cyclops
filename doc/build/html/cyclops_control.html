@@ -1,0 +1,167 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Cyclops Control &#8212; Cyclops 1.0 documentation</title>
+    
+    <link rel="stylesheet" href="_static/alabaster.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true,
+        SOURCELINK_SUFFIX: '.txt'
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.0/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="RSWE Direct" href="rswe_direct.html" />
+    <link rel="prev" title="Cyclops" href="cyclops.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head>
+  <body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <div class="section" id="module-cyclops_control">
+<span id="cyclops-control"></span><h1>Cyclops Control<a class="headerlink" href="#module-cyclops_control" title="Permalink to this headline">¶</a></h1>
+<p>This module provides a dictionary through which all computational and physical
+parameters are organised and accessed. All have semi-reasonable default values
+and may be chosen by the user via the command-line interface.</p>
+<div class="section" id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Permalink to this headline">¶</a></h2>
+<ul class="simple">
+<li><cite>make_control</cite> : Creates a control object with the default values</li>
+<li><cite>setup_control</cite> : Updates the default control object with user selections</li>
+</ul>
+</div>
+<div class="section" id="parameters">
+<h2>Parameters<a class="headerlink" href="#parameters" title="Permalink to this headline">¶</a></h2>
+<ul class="simple">
+<li><cite>filename</cite> : Filename root for input initial conditions &lt;str&gt;</li>
+<li><cite>Nx</cite> : Number of gridpoints along one direction. Domain is Nx X Nx square &lt;int&gt;</li>
+<li><cite>Nt</cite> : Number of coarse timesteps. In practice set to number of processes &lt;int&gt;</li>
+<li><cite>coarse_timestep</cite> : Coarse timestep length &lt;float&gt;</li>
+<li><cite>fine_timestep</cite> : Fine timestep length &lt;float&gt;</li>
+<li><cite>Lx</cite> : Side length of the square domain &lt;float&gt;</li>
+<li><cite>conv_tol</cite> : The convergence criterion for iterative error &lt;float&gt;</li>
+<li><cite>HMM_T0</cite> : The length of the averaging window (absoltue) &lt;float&gt;</li>
+<li><cite>mu</cite> : Hyperviscosity coefficient &lt;float&gt;</li>
+<li><cite>outFileStem</cite> : Optional stem for output filenames &lt;str&gt;</li>
+<li><cite>f_naught</cite> : Coriolis parameters &lt;float&gt;</li>
+<li><cite>H_naught</cite> : Mean water depth &lt;float&gt;</li>
+<li><cite>gravity</cite> : Gravitational acceleration, g &lt;float&gt;</li>
+</ul>
+<div class="line-block">
+<div class="line">Author: Adam G. Peddle</div>
+<div class="line">Contact: <a class="reference external" href="mailto:ap553&#37;&#52;&#48;exeter&#46;ac&#46;uk">ap553<span>&#64;</span>exeter<span>&#46;</span>ac<span>&#46;</span>uk</a></div>
+<div class="line">Version: 1.0</div>
+</div>
+<dl class="function">
+<dt id="cyclops_control.make_control">
+<code class="descclassname">cyclops_control.</code><code class="descname">make_control</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/cyclops_control.html#make_control"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cyclops_control.make_control" title="Permalink to this definition">¶</a></dt>
+<dd><p>Initialises the control object to the default values. New defaults
+should be placed here.</p>
+<p><strong>Returns</strong>
+- <cite>control</cite> : Default control object</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="cyclops_control.setup_control">
+<code class="descclassname">cyclops_control.</code><code class="descname">setup_control</code><span class="sig-paren">(</span><em>invals</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/cyclops_control.html#setup_control"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cyclops_control.setup_control" title="Permalink to this definition">¶</a></dt>
+<dd><p>Creates and updates the default control object with user selections.
+Input should come via stdin and relies on sys.argv for parsing.</p>
+<p><strong>Parameters</strong>
+- <cite>invals</cite> : command-line input values in Unix-style</p>
+<p><strong>Returns</strong>
+- <cite>control</cite> : Default control object</p>
+</dd></dl>
+
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+            <p class="logo"><a href="index.html">
+              <img class="logo" src="_static/Cyclops_1.jpg" alt="Logo"/>
+            </a></p>
+  <h3><a href="index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">Cyclops Control</a><ul>
+<li><a class="reference internal" href="#functions">Functions</a></li>
+<li><a class="reference internal" href="#parameters">Parameters</a></li>
+</ul>
+</li>
+</ul>
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+      <li>Previous: <a href="cyclops.html" title="previous chapter">Cyclops</a></li>
+      <li>Next: <a href="rswe_direct.html" title="next chapter">RSWE Direct</a></li>
+  </ul></li>
+</ul>
+</div>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="_sources/cyclops_control.rst.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <div><input type="text" name="q" /></div>
+      <div><input type="submit" value="Go" /></div>
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2017, Adam G Peddle.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 1.6.2</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.9</a>
+      
+      |
+      <a href="_sources/cyclops_control.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

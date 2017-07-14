@@ -1,0 +1,488 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>rswe_exponential_integrator &#8212; Cyclops 1.0 documentation</title>
+    
+    <link rel="stylesheet" href="../_static/alabaster.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true,
+        SOURCELINK_SUFFIX: '.txt'
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.0/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+   
+  <link rel="stylesheet" href="../_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head>
+  <body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for rswe_exponential_integrator</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/env/ python3</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">This module implements the solution to the exponential integrator for the linear operator</span>
+<span class="sd">of the rotating shallow water equations as used by pypint.</span>
+
+<span class="sd">Consider the RSWE, neglecting the nonlinear terms. We may write this as:</span>
+
+<span class="sd">.. math :: \\frac{\\partial u}{\\partial t} = Lu</span>
+
+<span class="sd">We may solve this via an integrating factor method, yielding:</span>
+
+<span class="sd">.. math:: u_{t} = e^{tL}u_{0}</span>
+
+<span class="sd">to which we may freely apply various choices of timestepping. The exponential integrator</span>
+<span class="sd">then requires the efficient computation of the matrix exponential. We write the matrix</span>
+<span class="sd">exponential in the form:</span>
+
+<span class="sd">.. math:: e^{tL} = r_{k}^{\\alpha} e^{t\\omega_{k}^{\\alpha}} (r_{k}^{\\alpha})^{-1}</span>
+
+<span class="sd">where :math:`r_{k}^{\\alpha}` is a matrix containing the eigenvectors of the linear</span>
+<span class="sd">operator (for a corresponding wavenumber, k, as we are working in Fourier space) and</span>
+<span class="sd">:math:`\\omega_{k}^{\\alpha}` is a vector containing the associated eigenvalues of</span>
+<span class="sd">the linear operator, such that:</span>
+
+<span class="sd">.. math:: \\omega_{k}^{\\alpha} = \\alpha\\sqrt{f_{0}^{2} + 2\\pi g H_{0} |k| / L}</span>
+
+<span class="sd">with :math:`\\alpha = -1, 0, 1`. This reduces the problem to an easier problem</span>
+<span class="sd">of finding the eigenvalues/eigenvectors and applying these. These are pre-computed</span>
+<span class="sd">for speed as they will not change over the course of the computation for constant</span>
+<span class="sd">gravity, rotation, and water depth.</span>
+
+<span class="sd">Classes</span>
+<span class="sd">-------</span>
+<span class="sd">-`ExponentialIntegrator` : Implements the exponential integrator for the RSWE</span>
+
+<span class="sd">Notes</span>
+<span class="sd">-----</span>
+<span class="sd">We write the linear operator, L, as:</span>
+
+<span class="sd">.. math:: L = \\left[\\begin{array}{ccc}</span>
+<span class="sd">                0 &amp; -f_{0} &amp; g\\partial_{x} \\\\</span>
+<span class="sd">               f_{0} &amp; 0 &amp; g\\partial_{y} \\\\</span>
+<span class="sd">               H_{0}\\partial_{x} &amp; H_{0}\\partial_{y} &amp; 0 \\end{array}\\right]</span>
+
+<span class="sd">which becomes, in Fourier space:</span>
+
+<span class="sd">.. math:: L = \\left[\\begin{array}{ccc}</span>
+<span class="sd">                0 &amp; -f_{0} &amp; 2\\pi i g k_{1}/L \\\\</span>
+<span class="sd">               f_{0} &amp; 0 &amp; 2\\pi i g k_{2}/L \\\\</span>
+<span class="sd">               2\\pi i H_{0} k_{1}/L &amp; 2\\pi i H_{0} k_{2}/L &amp; 0 \\end{array}\\right]</span>
+
+<span class="sd">See Also</span>
+<span class="sd">--------</span>
+<span class="sd">numpy</span>
+
+<span class="sd">| Authors: Terry Haut, Adam G. Peddle</span>
+<span class="sd">| Contact: ap553@exeter.ac.uk</span>
+<span class="sd">| Version: 2.0</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+
+<span class="kn">import</span> <span class="nn">cyclops_control</span>
+<span class="c1">#import matplotlib.pyplot as plt</span>
+<span class="kn">import</span> <span class="nn">sys</span>
+<span class="kn">import</span> <span class="nn">spectral_toolbox</span>
+<span class="kn">import</span> <span class="nn">rswe_direct</span>
+
+<div class="viewcode-block" id="ExponentialIntegrator"><a class="viewcode-back" href="../rswe_exponential_integrator.html#rswe_exponential_integrator.ExponentialIntegrator">[docs]</a><span class="k">class</span> <span class="nc">ExponentialIntegrator</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Implements the exponential integrator for the Rotating Shallow Water Equations.</span>
+
+<span class="sd">    This class implements the exponential integrator objects, which precompute and store</span>
+<span class="sd">    the eigenvalues and eigenvectors of the linear operator in Fourier space and apply</span>
+<span class="sd">    the matrix exponential for a given timestep when invoked. See module header for</span>
+<span class="sd">    explanation of computation.</span>
+
+<span class="sd">    **Methods**</span>
+
+<span class="sd">    - `call` : Invoke the matrix exponential</span>
+<span class="sd">    - `project_basis` : Use the computed eigenbasis to project</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;This class is not stand-alone&quot;</span><span class="p">)</span>
+
+<div class="viewcode-block" id="ExponentialIntegrator.call"><a class="viewcode-back" href="../rswe_exponential_integrator.html#rswe_exponential_integrator.ExponentialIntegrator.call">[docs]</a>    <span class="k">def</span> <span class="nf">call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">U_hat</span><span class="p">,</span><span class="n">t</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Call to invoke the exponential integrator on a given initial solution over some time.</span>
+
+<span class="sd">        Propagates the solution to the linear problem for some time, t, based on the initial</span>
+<span class="sd">        condition, U. U is, in general, the value at the beginning of a timestep and t is the</span>
+<span class="sd">        timestep, although this need not be the case.</span>
+
+<span class="sd">        **Parameters**</span>
+
+<span class="sd">        - `U_hat` : the Fourier modes of the unknown solution, ordered as below</span>
+<span class="sd">        - `t` : the time at which the solution is desired (or timestep to be used)</span>
+
+<span class="sd">        **Returns**</span>
+
+<span class="sd">        - `U_hat_sp` : The computed solution, propagated by time t</span>
+
+<span class="sd">        **Notes**</span>
+
+<span class="sd">        1) Works in -t direction as well.</span>
+<span class="sd">        2) Input order: v1[:,:] = U_hat[0,:,:], v2[:,:] = U_hat[1,:,:], h[:,:] = U_hat[2,:,:]</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="c1"># Separate unknowns to allow vector multiply for speed</span>
+        <span class="n">v1_hat</span> <span class="o">=</span> <span class="n">U_hat</span><span class="p">[</span><span class="mi">0</span><span class="p">,:,:]</span>
+        <span class="n">v2_hat</span> <span class="o">=</span> <span class="n">U_hat</span><span class="p">[</span><span class="mi">1</span><span class="p">,:,:]</span>
+        <span class="n">h_hat</span> <span class="o">=</span> <span class="n">U_hat</span><span class="p">[</span><span class="mi">2</span><span class="p">,:,:]</span>
+
+        <span class="c1"># First eigenvector for L(ik), eigenvalue omega=0</span>
+        <span class="n">rk00</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">eBasis</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">,:,:]</span>
+        <span class="n">rk10</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">eBasis</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="mi">0</span><span class="p">,:,:]</span>
+        <span class="n">rk20</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">eBasis</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span><span class="mi">0</span><span class="p">,:,:]</span>
+
+        <span class="c1"># Second eigenvector for L(ik),</span>
+        <span class="c1"># eigenvalue omega = -i*sqrt(F+k^2)</span>
+        <span class="n">rk01</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">eBasis</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">,:,:]</span>
+        <span class="n">rk11</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">eBasis</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">,:,:]</span>
+        <span class="n">rk21</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">eBasis</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span><span class="mi">1</span><span class="p">,:,:]</span>
+
+        <span class="c1"># Third eigenvector for L(ik),</span>
+        <span class="c1"># eigenvalue omega = I*sqrt(F+k^2)</span>
+        <span class="n">rk02</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">eBasis</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">2</span><span class="p">,:,:]</span>
+        <span class="n">rk12</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">eBasis</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span><span class="p">,:,:]</span>
+        <span class="n">rk22</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">eBasis</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span><span class="mi">2</span><span class="p">,:,:]</span>
+
+        <span class="c1"># Convert to eigenvector basis</span>
+        <span class="n">U_hat_sp</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span><span class="bp">self</span><span class="o">.</span><span class="n">_Nx</span><span class="p">,</span><span class="bp">self</span><span class="o">.</span><span class="n">_Nx</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="s1">&#39;complex&#39;</span><span class="p">)</span>
+        <span class="n">v1_hat_sp</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">conj</span><span class="p">(</span><span class="n">rk00</span><span class="p">)</span> <span class="o">*</span> <span class="n">v1_hat</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">conj</span><span class="p">(</span><span class="n">rk10</span><span class="p">)</span> <span class="o">*</span> <span class="n">v2_hat</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">conj</span><span class="p">(</span><span class="n">rk20</span><span class="p">)</span> <span class="o">*</span> <span class="n">h_hat</span>
+        <span class="n">v2_hat_sp</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">conj</span><span class="p">(</span><span class="n">rk01</span><span class="p">)</span> <span class="o">*</span> <span class="n">v1_hat</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">conj</span><span class="p">(</span><span class="n">rk11</span><span class="p">)</span> <span class="o">*</span> <span class="n">v2_hat</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">conj</span><span class="p">(</span><span class="n">rk21</span><span class="p">)</span> <span class="o">*</span> <span class="n">h_hat</span>
+        <span class="n">h_hat_sp</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">conj</span><span class="p">(</span><span class="n">rk02</span><span class="p">)</span> <span class="o">*</span> <span class="n">v1_hat</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">conj</span><span class="p">(</span><span class="n">rk12</span><span class="p">)</span> <span class="o">*</span> <span class="n">v2_hat</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">conj</span><span class="p">(</span><span class="n">rk22</span><span class="p">)</span> <span class="o">*</span> <span class="n">h_hat</span>
+
+        <span class="c1"># Apply exp(-t*L)</span>
+        <span class="n">omega0</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">eVals</span><span class="p">[</span><span class="mi">0</span><span class="p">,:,:];</span> <span class="n">omega0</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="n">j</span><span class="o">*</span><span class="n">omega0</span><span class="o">*</span><span class="n">t</span><span class="p">)</span>  <span class="c1"># omega0[:,:] = 1.0</span>
+        <span class="n">omega1</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">eVals</span><span class="p">[</span><span class="mi">1</span><span class="p">,:,:];</span> <span class="n">omega1</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="n">j</span><span class="o">*</span><span class="n">omega1</span><span class="o">*</span><span class="n">t</span><span class="p">)</span>
+        <span class="n">omega2</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">eVals</span><span class="p">[</span><span class="mi">2</span><span class="p">,:,:];</span> <span class="n">omega2</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="n">j</span><span class="o">*</span><span class="n">omega2</span><span class="o">*</span><span class="n">t</span><span class="p">)</span>
+
+        <span class="n">U_hat_sp</span><span class="p">[</span><span class="mi">0</span><span class="p">,:,:]</span> <span class="o">=</span> <span class="n">omega0</span> <span class="o">*</span> <span class="n">rk00</span> <span class="o">*</span> <span class="n">v1_hat_sp</span> <span class="o">+</span>  <span class="n">omega1</span> <span class="o">*</span> <span class="n">rk01</span> <span class="o">*</span> <span class="n">v2_hat_sp</span> <span class="o">+</span> \
+                          <span class="n">omega2</span> <span class="o">*</span> <span class="n">rk02</span> <span class="o">*</span> <span class="n">h_hat_sp</span>
+        <span class="n">U_hat_sp</span><span class="p">[</span><span class="mi">1</span><span class="p">,:,:]</span> <span class="o">=</span> <span class="n">omega0</span> <span class="o">*</span> <span class="n">rk10</span> <span class="o">*</span> <span class="n">v1_hat_sp</span> <span class="o">+</span>  <span class="n">omega1</span> <span class="o">*</span> <span class="n">rk11</span> <span class="o">*</span> <span class="n">v2_hat_sp</span> <span class="o">+</span> \
+                          <span class="n">omega2</span> <span class="o">*</span> <span class="n">rk12</span> <span class="o">*</span> <span class="n">h_hat_sp</span>
+        <span class="n">U_hat_sp</span><span class="p">[</span><span class="mi">2</span><span class="p">,:,:]</span> <span class="o">=</span> <span class="n">omega0</span> <span class="o">*</span> <span class="n">rk20</span> <span class="o">*</span> <span class="n">v1_hat_sp</span> <span class="o">+</span>  <span class="n">omega1</span> <span class="o">*</span> <span class="n">rk21</span> <span class="o">*</span> <span class="n">v2_hat_sp</span> <span class="o">+</span> \
+                          <span class="n">omega2</span> <span class="o">*</span> <span class="n">rk22</span> <span class="o">*</span> <span class="n">h_hat_sp</span>
+
+        <span class="k">return</span> <span class="n">U_hat_sp</span></div>
+
+<div class="viewcode-block" id="ExponentialIntegrator.project_basis"><a class="viewcode-back" href="../rswe_exponential_integrator.html#rswe_exponential_integrator.ExponentialIntegrator.project_basis">[docs]</a>    <span class="k">def</span> <span class="nf">project_basis</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">U_hat</span><span class="p">,</span><span class="n">t</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Call to invoke the exponential integrator on a given initial solution over some time.</span>
+
+<span class="sd">        Propagates the solution to the linear problem for some time, t, based on the initial</span>
+<span class="sd">        condition, U. U is, in general, the value at the beginning of a timestep and t is the</span>
+<span class="sd">        timestep, although this need not be the case.</span>
+
+<span class="sd">        **Parameters**</span>
+
+<span class="sd">        - `U_hat` : the Fourier modes of the unknown solution, ordered as below</span>
+<span class="sd">        - `t` : the time at which the solution is desired (or timestep to be used)</span>
+
+<span class="sd">        **Returns**</span>
+
+<span class="sd">        - `U_hat_sp` : The computed solution, propagated by time t</span>
+
+<span class="sd">        **Notes**</span>
+
+<span class="sd">        1) Works in -t direction as well.</span>
+<span class="sd">        2) Input order: v1[:,:] = U_hat[0,:,:], v2[:,:] = U_hat[1,:,:], h[:,:] = U_hat[2,:,:]</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="c1"># Separate unknowns to allow vector multiply for speed</span>
+        <span class="n">v1_hat</span> <span class="o">=</span> <span class="n">U_hat</span><span class="p">[</span><span class="mi">0</span><span class="p">,:,:]</span>
+        <span class="n">v2_hat</span> <span class="o">=</span> <span class="n">U_hat</span><span class="p">[</span><span class="mi">1</span><span class="p">,:,:]</span>
+        <span class="n">h_hat</span> <span class="o">=</span> <span class="n">U_hat</span><span class="p">[</span><span class="mi">2</span><span class="p">,:,:]</span>
+
+        <span class="c1"># First eigenvector for L(ik), eigenvalue omega=0</span>
+        <span class="n">rk00</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">eBasis</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">,:,:]</span>
+        <span class="n">rk10</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">eBasis</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="mi">0</span><span class="p">,:,:]</span>
+        <span class="n">rk20</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">eBasis</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span><span class="mi">0</span><span class="p">,:,:]</span>
+
+        <span class="c1"># Second eigenvector for L(ik),</span>
+        <span class="c1"># eigenvalue omega = -i*sqrt(F+k^2)</span>
+        <span class="n">rk01</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">eBasis</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">,:,:]</span>
+        <span class="n">rk11</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">eBasis</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">,:,:]</span>
+        <span class="n">rk21</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">eBasis</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span><span class="mi">1</span><span class="p">,:,:]</span>
+
+        <span class="c1"># Third eigenvector for L(ik),</span>
+        <span class="c1"># eigenvalue omega = I*sqrt(F+k^2)</span>
+        <span class="n">rk02</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">eBasis</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">2</span><span class="p">,:,:]</span>
+        <span class="n">rk12</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">eBasis</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span><span class="p">,:,:]</span>
+        <span class="n">rk22</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">eBasis</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span><span class="mi">2</span><span class="p">,:,:]</span>
+
+        <span class="c1"># Convert to eigenvector basis</span>
+        <span class="n">sigmas</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span><span class="bp">self</span><span class="o">.</span><span class="n">_Nx</span><span class="p">,</span><span class="bp">self</span><span class="o">.</span><span class="n">_Nx</span><span class="p">),</span> <span class="n">dtype</span> <span class="o">=</span> <span class="nb">complex</span><span class="p">)</span>
+        <span class="n">sig_0</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">conj</span><span class="p">(</span><span class="n">rk00</span><span class="p">)</span> <span class="o">*</span> <span class="n">v1_hat</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">conj</span><span class="p">(</span><span class="n">rk10</span><span class="p">)</span> <span class="o">*</span> <span class="n">v2_hat</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">conj</span><span class="p">(</span><span class="n">rk20</span><span class="p">)</span> <span class="o">*</span> <span class="n">h_hat</span>
+        <span class="n">sig_m1</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">conj</span><span class="p">(</span><span class="n">rk01</span><span class="p">)</span> <span class="o">*</span> <span class="n">v1_hat</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">conj</span><span class="p">(</span><span class="n">rk11</span><span class="p">)</span> <span class="o">*</span> <span class="n">v2_hat</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">conj</span><span class="p">(</span><span class="n">rk21</span><span class="p">)</span> <span class="o">*</span> <span class="n">h_hat</span>
+        <span class="n">sig_p1</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">conj</span><span class="p">(</span><span class="n">rk02</span><span class="p">)</span> <span class="o">*</span> <span class="n">v1_hat</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">conj</span><span class="p">(</span><span class="n">rk12</span><span class="p">)</span> <span class="o">*</span> <span class="n">v2_hat</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">conj</span><span class="p">(</span><span class="n">rk22</span><span class="p">)</span> <span class="o">*</span> <span class="n">h_hat</span>
+
+        <span class="c1"># Apply exp(-t*L)</span>
+        <span class="n">omega0</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">eVals</span><span class="p">[</span><span class="mi">0</span><span class="p">,:,:];</span> <span class="n">omega0</span><span class="p">[:,:]</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="c1">#omega0 = np.exp(-1j*omega0*t/self._eps)</span>
+        <span class="n">omega1</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">eVals</span><span class="p">[</span><span class="mi">1</span><span class="p">,:,:];</span> <span class="n">omega1</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="n">j</span><span class="o">*</span><span class="n">omega1</span><span class="o">*-</span><span class="n">t</span><span class="p">)</span>
+        <span class="n">omega2</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">eVals</span><span class="p">[</span><span class="mi">2</span><span class="p">,:,:];</span> <span class="n">omega2</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="n">j</span><span class="o">*</span><span class="n">omega2</span><span class="o">*-</span><span class="n">t</span><span class="p">)</span>
+
+        <span class="n">sigmas</span><span class="p">[</span><span class="mi">0</span><span class="p">,:,:]</span> <span class="o">=</span> <span class="n">omega0</span><span class="o">*</span><span class="n">sig_0</span>
+        <span class="n">sigmas</span><span class="p">[</span><span class="mi">1</span><span class="p">,:,:]</span> <span class="o">=</span> <span class="n">omega1</span><span class="o">*</span><span class="n">sig_m1</span>
+        <span class="n">sigmas</span><span class="p">[</span><span class="mi">2</span><span class="p">,:,:]</span> <span class="o">=</span> <span class="n">omega2</span><span class="o">*</span><span class="n">sig_p1</span>
+
+        <span class="k">return</span> <span class="n">sigmas</span></div></div>
+
+
+<div class="viewcode-block" id="ExponentialIntegrator_FullEqs"><a class="viewcode-back" href="../rswe_exponential_integrator.html#rswe_exponential_integrator.ExponentialIntegrator_FullEqs">[docs]</a><span class="k">class</span> <span class="nc">ExponentialIntegrator_FullEqs</span><span class="p">(</span><span class="n">ExponentialIntegrator</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Implements the exponential integrator for the dimensional, perturbation-height</span>
+<span class="sd">    Rotating Shallow Water Equations which have been symmetrised with respect to</span>
+<span class="sd">    the geopotential height.</span>
+
+<span class="sd">    This class implements the exponential integrator objects, which precompute and store</span>
+<span class="sd">    the eigenvalues and eigenvectors of the linear operator in Fourier space and apply</span>
+<span class="sd">    the matrix exponential for a given timestep when invoked. See module header for</span>
+<span class="sd">    explanation of computation.</span>
+
+<span class="sd">    **Attributes**</span>
+
+<span class="sd">    - `f0` : the Coriolis parameter</span>
+<span class="sd">    - `g` : the gravitational acceleration</span>
+<span class="sd">    - `H0` : the mean water depth</span>
+<span class="sd">    - `deriv_factor` : factor of 2*pi/L due to spectral differentiation</span>
+<span class="sd">    - `_Nx` : Number of grid points, such that domain is Nx X Nx</span>
+<span class="sd">    - `eVals` : Vector of eigenvalues, ordered alpha = 0, -1, 1</span>
+<span class="sd">    - `eBasis` : Corresponding orthonormalised matrix of eigenvectors, arranged in columns</span>
+
+<span class="sd">    **Methods**</span>
+
+<span class="sd">    - `create_eigenvalues` : Set up the analytically-computed eigenvalues for L</span>
+<span class="sd">    - `create_eigenbasis` : Set up the analyticall-computed eigenbasis for L</span>
+<span class="sd">    - `call` : Invoke the matrix exponential</span>
+
+<span class="sd">    **Parameters**</span>
+
+<span class="sd">    - `control` : Control object containing the relevant parameters/constants for initialisation</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">control</span><span class="p">):</span>
+        <span class="c1"># Physical parameters:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">H0</span> <span class="o">=</span> <span class="n">control</span><span class="p">[</span><span class="s1">&#39;H_naught&#39;</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">f0</span> <span class="o">=</span> <span class="n">control</span><span class="p">[</span><span class="s1">&#39;f_naught&#39;</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">g</span> <span class="o">=</span> <span class="n">control</span><span class="p">[</span><span class="s1">&#39;gravity&#39;</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">phi0</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">g</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">H0</span>
+
+        <span class="c1"># Factor arising from spectral derivative on domain of size L</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">deriv_factor</span> <span class="o">=</span> <span class="mf">2.0</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="o">/</span><span class="n">control</span><span class="p">[</span><span class="s1">&#39;Lx&#39;</span><span class="p">]</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_Nx</span> <span class="o">=</span> <span class="n">control</span><span class="p">[</span><span class="s1">&#39;Nx&#39;</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">eVals</span>  <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span><span class="bp">self</span><span class="o">.</span><span class="n">_Nx</span><span class="p">,</span><span class="bp">self</span><span class="o">.</span><span class="n">_Nx</span><span class="p">),</span>   <span class="n">dtype</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">eBasis</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span><span class="mi">3</span><span class="p">,</span><span class="bp">self</span><span class="o">.</span><span class="n">_Nx</span><span class="p">,</span><span class="bp">self</span><span class="o">.</span><span class="n">_Nx</span><span class="p">),</span> <span class="n">dtype</span> <span class="o">=</span> <span class="nb">complex</span><span class="p">)</span>
+
+        <span class="n">linearOperator</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">shape</span> <span class="o">=</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span><span class="mi">3</span><span class="p">),</span> <span class="n">dtype</span> <span class="o">=</span> <span class="nb">complex</span><span class="p">)</span>
+        <span class="n">ctr_shift</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_Nx</span><span class="o">//</span><span class="mi">2</span>  <span class="c1"># Python arrays are numbered from 0 to N-1, spectrum goes from -N/2 to N/2-1</span>
+
+        <span class="k">for</span> <span class="n">k1</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">_Nx</span><span class="o">//</span><span class="mi">2</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_Nx</span><span class="o">//</span><span class="mi">2</span><span class="p">):</span>
+            <span class="k">for</span> <span class="n">k2</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">_Nx</span><span class="o">//</span><span class="mi">2</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_Nx</span><span class="o">//</span><span class="mi">2</span><span class="p">):</span>
+                <span class="c1"># Create eigenvals/vects for given wavenumber</span>
+                <span class="c1"># combination. Consider shift between array and</span>
+                <span class="c1"># spectrum</span>
+                <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">                L_op = np.zeros((3,3), dtype = complex)</span>
+<span class="sd">                L_op[0,1] = -self.f0</span>
+<span class="sd">                L_op[1,0] = self.f0</span>
+<span class="sd">                L_op[2,0] = np.sqrt(self.phi0)*k1*1j*self.deriv_factor</span>
+<span class="sd">                L_op[2,1] = np.sqrt(self.phi0)*k2*1j*self.deriv_factor</span>
+<span class="sd">                L_op[0,2] = np.sqrt(self.phi0)*k1*1j*self.deriv_factor</span>
+<span class="sd">                L_op[1,2] = np.sqrt(self.phi0)*k2*1j*self.deriv_factor</span>
+
+<span class="sd">                eVals, eBasis = np.linalg.eig(L_op)</span>
+<span class="sd">                self.eVals[:,k1 + ctr_shift, k2 + ctr_shift] = np.imag(eVals)</span>
+<span class="sd">                self.eBasis[:,:,k1 + ctr_shift, k2 + ctr_shift]  = eBasis</span>
+<span class="sd">                &quot;&quot;&quot;</span>
+
+                <span class="bp">self</span><span class="o">.</span><span class="n">eVals</span><span class="p">[:,</span><span class="n">k1</span> <span class="o">+</span> <span class="n">ctr_shift</span><span class="p">,</span> <span class="n">k2</span> <span class="o">+</span> <span class="n">ctr_shift</span><span class="p">]</span>    <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">create_eigenvalues</span><span class="p">(</span><span class="n">k1</span><span class="p">,</span> <span class="n">k2</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">eBasis</span><span class="p">[:,:,</span><span class="n">k1</span> <span class="o">+</span> <span class="n">ctr_shift</span><span class="p">,</span> <span class="n">k2</span> <span class="o">+</span> <span class="n">ctr_shift</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">create_eigenbasis</span><span class="p">(</span><span class="n">k1</span><span class="p">,</span> <span class="n">k2</span><span class="p">)</span>
+
+<div class="viewcode-block" id="ExponentialIntegrator_FullEqs.create_eigenvalues"><a class="viewcode-back" href="../rswe_exponential_integrator.html#rswe_exponential_integrator.ExponentialIntegrator_FullEqs.create_eigenvalues">[docs]</a>    <span class="k">def</span> <span class="nf">create_eigenvalues</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">k1</span><span class="p">,</span> <span class="n">k2</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Creates the eigenvalues required for the creation of the eigenbasis (of the linear operator).</span>
+
+<span class="sd">        This method returns the eigenvectors of the linear operator of the RSWE as formulated in</span>
+<span class="sd">        spectral space. These have been found analytically to be:</span>
+
+<span class="sd">        .. math:: evals = \\alpha\\sqrt{f_{0}^{2} + \\beta^{2}gH_{0}|k|^{2}}</span>
+
+<span class="sd">        where :math:`\\beta = 2\\pi/L` and :math:`\\alpha = 0, -1, +1`, respectively.</span>
+
+<span class="sd">        **Parameters**</span>
+
+<span class="sd">        - `k1`, `k2` : the wavenumbers in the x- and y- directions</span>
+
+<span class="sd">        **Returns**</span>
+
+<span class="sd">        - `eVals` : eigenvalues for slow mode and fast waves in - and + directions, in that order</span>
+
+<span class="sd">        **Notes**</span>
+
+<span class="sd">        Note that these have been found analytically and so an arbitrary L is not currently supported.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="n">eVals</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">dtype</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+        <span class="n">eVals</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="mf">0.</span>
+        <span class="c1"># deriv_factor corresponds to beta in the header</span>
+        <span class="n">eVals</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">f0</span><span class="o">**</span><span class="mi">2</span> <span class="o">+</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">deriv_factor</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">phi0</span><span class="o">*</span><span class="p">(</span><span class="n">k1</span><span class="o">**</span><span class="mi">2</span> <span class="o">+</span> <span class="n">k2</span><span class="o">**</span><span class="mi">2</span><span class="p">))</span>
+        <span class="n">eVals</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span>  <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">f0</span><span class="o">**</span><span class="mi">2</span> <span class="o">+</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">deriv_factor</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">phi0</span><span class="o">*</span><span class="p">(</span><span class="n">k1</span><span class="o">**</span><span class="mi">2</span> <span class="o">+</span> <span class="n">k2</span><span class="o">**</span><span class="mi">2</span><span class="p">))</span>
+
+        <span class="k">return</span> <span class="n">eVals</span></div>
+
+<div class="viewcode-block" id="ExponentialIntegrator_FullEqs.create_eigenbasis"><a class="viewcode-back" href="../rswe_exponential_integrator.html#rswe_exponential_integrator.ExponentialIntegrator_FullEqs.create_eigenbasis">[docs]</a>    <span class="k">def</span> <span class="nf">create_eigenbasis</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">k1</span><span class="p">,</span> <span class="n">k2</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Create the eigenbasis of the linear operator. As with the eigenvalues, it is an implementation of</span>
+<span class="sd">        an analytical solution.</span>
+
+<span class="sd">        This method computes the eigenvector matrix for a given wavenumber pair. It does not solve the</span>
+<span class="sd">        eigenvalue problem, rather the analytical solution has been found for the representation of the</span>
+<span class="sd">        linear operator which has been used.</span>
+
+<span class="sd">        **Parameters**</span>
+
+<span class="sd">        - `k1`, `k2` : the wavenumbers in the x- and y- directions</span>
+
+<span class="sd">        **Returns**</span>
+
+<span class="sd">        - `A` : eigenvectors of L in columns, with slow mode 1st then fast waves in - and + directions</span>
+
+<span class="sd">        **Notes**</span>
+
+<span class="sd">        1) Note that these have been found analytically and so an arbitrary L is not currently supported.</span>
+<span class="sd">        2) The eigenbasis is orthonormalised</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="n">A</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span><span class="mi">3</span><span class="p">),</span> <span class="n">dtype</span> <span class="o">=</span> <span class="nb">complex</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">k1</span> <span class="o">!=</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">k2</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>  <span class="c1"># Almost all of the time</span>
+            <span class="n">kappa</span> <span class="o">=</span> <span class="n">k1</span><span class="o">**</span><span class="mi">2</span> <span class="o">+</span> <span class="n">k2</span><span class="o">**</span><span class="mi">2</span>
+            <span class="n">f</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">f0</span>
+            <span class="n">sqp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">deriv_factor</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">g</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">H0</span><span class="p">)</span>  <span class="c1"># Factor on spatial derivatives</span>
+            <span class="n">omega</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">f</span><span class="o">**</span><span class="mi">2</span> <span class="o">+</span> <span class="n">sqp</span><span class="o">*</span><span class="n">sqp</span><span class="o">*</span><span class="n">kappa</span><span class="p">)</span>
+            <span class="n">pm_1_denom</span> <span class="o">=</span> <span class="n">omega</span><span class="o">*</span><span class="n">omega</span><span class="o">/</span><span class="n">f</span> <span class="o">-</span> <span class="n">f</span>
+
+            <span class="c1"># Eigenvectors in columns corresponding to slow mode and</span>
+            <span class="c1"># fast waves travelling in either direction</span>
+            <span class="n">A</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="o">-</span><span class="mi">1</span><span class="n">j</span><span class="o">*</span><span class="n">sqp</span><span class="o">*</span><span class="n">k2</span><span class="o">/</span><span class="n">f</span><span class="p">,</span> <span class="n">sqp</span><span class="o">*</span><span class="p">(</span><span class="mi">1</span><span class="n">j</span><span class="o">*</span><span class="n">k2</span> <span class="o">-</span> <span class="n">omega</span><span class="o">*</span><span class="n">k1</span><span class="o">/</span><span class="n">f</span><span class="p">)</span><span class="o">/</span><span class="n">pm_1_denom</span><span class="p">,</span>  <span class="n">sqp</span><span class="o">*</span><span class="p">(</span><span class="mi">1</span><span class="n">j</span><span class="o">*</span><span class="n">k2</span> <span class="o">+</span> <span class="n">omega</span><span class="o">*</span><span class="n">k1</span><span class="o">/</span><span class="n">f</span><span class="p">)</span><span class="o">/</span><span class="n">pm_1_denom</span><span class="p">],</span>
+                          <span class="p">[</span><span class="mi">1</span><span class="n">j</span><span class="o">*</span><span class="n">sqp</span><span class="o">*</span><span class="n">k1</span><span class="o">/</span><span class="n">f</span><span class="p">,</span>  <span class="o">-</span><span class="n">sqp</span><span class="o">*</span><span class="p">(</span><span class="mi">1</span><span class="n">j</span><span class="o">*</span><span class="n">k1</span> <span class="o">+</span> <span class="n">omega</span><span class="o">*</span><span class="n">k2</span><span class="o">/</span><span class="n">f</span><span class="p">)</span><span class="o">/</span><span class="n">pm_1_denom</span><span class="p">,</span> <span class="n">sqp</span><span class="o">*</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="n">j</span><span class="o">*</span><span class="n">k1</span> <span class="o">+</span> <span class="n">omega</span><span class="o">*</span><span class="n">k2</span><span class="o">/</span><span class="n">f</span><span class="p">)</span><span class="o">/</span><span class="n">pm_1_denom</span><span class="p">],</span>
+                          <span class="p">[</span><span class="mf">1.</span><span class="p">,</span>           <span class="mf">1.</span><span class="p">,</span>                                   <span class="mf">1.</span><span class="p">]],</span> <span class="n">dtype</span> <span class="o">=</span> <span class="nb">complex</span><span class="p">)</span>
+
+            <span class="c1"># Orthonormalise slow mode eigenvector</span>
+            <span class="n">eig_norm</span> <span class="o">=</span> <span class="n">omega</span><span class="o">/</span><span class="n">f</span>
+            <span class="c1">#eig_norm = np.sqrt(A[0,0]**2 + A[1,0]**2 + A[2,0]**2)</span>
+            <span class="n">A</span><span class="p">[:,</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">A</span><span class="p">[:,</span><span class="mi">0</span><span class="p">]</span><span class="o">/</span><span class="n">eig_norm</span>
+
+            <span class="n">eig_norm</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="mi">2</span><span class="o">*</span><span class="n">omega</span><span class="o">*</span><span class="n">omega</span><span class="o">/</span><span class="p">(</span><span class="n">sqp</span><span class="o">*</span><span class="n">sqp</span><span class="o">*</span><span class="n">kappa</span><span class="p">))</span>  <span class="c1"># Same orthonormalisation for both fast waves</span>
+
+            <span class="n">A</span><span class="p">[:,</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">A</span><span class="p">[:,</span><span class="mi">1</span><span class="p">]</span><span class="o">/</span><span class="n">eig_norm</span>
+            <span class="n">A</span><span class="p">[:,</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="n">A</span><span class="p">[:,</span><span class="mi">2</span><span class="p">]</span><span class="o">/</span><span class="n">eig_norm</span>
+
+            <span class="c1"># Check that orthonormalisation has actually orthonormalised</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">isclose</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">A</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">]</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">conj</span><span class="p">(</span><span class="n">A</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">])</span> <span class="o">+</span> <span class="n">A</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="mi">0</span><span class="p">]</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">conj</span><span class="p">(</span><span class="n">A</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="mi">0</span><span class="p">])</span> <span class="o">+</span> <span class="n">A</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span><span class="mi">0</span><span class="p">]</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">conj</span><span class="p">(</span><span class="n">A</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span><span class="mi">0</span><span class="p">])),</span> <span class="n">np</span><span class="o">.</span><span class="n">complex</span><span class="p">(</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span> <span class="n">rtol</span> <span class="o">=</span> <span class="mi">1</span><span class="n">e</span><span class="o">-</span><span class="mi">4</span><span class="p">,</span> <span class="n">atol</span> <span class="o">=</span> <span class="mi">1</span><span class="n">e</span><span class="o">-</span><span class="mi">6</span><span class="p">)</span>
+                <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">isclose</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">A</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">]</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">conj</span><span class="p">(</span><span class="n">A</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">])</span> <span class="o">+</span> <span class="n">A</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">]</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">conj</span><span class="p">(</span><span class="n">A</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">])</span> <span class="o">+</span> <span class="n">A</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span><span class="mi">1</span><span class="p">]</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">conj</span><span class="p">(</span><span class="n">A</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span><span class="mi">1</span><span class="p">])),</span> <span class="n">np</span><span class="o">.</span><span class="n">complex</span><span class="p">(</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span> <span class="n">rtol</span> <span class="o">=</span> <span class="mi">1</span><span class="n">e</span><span class="o">-</span><span class="mi">4</span><span class="p">,</span> <span class="n">atol</span> <span class="o">=</span> <span class="mi">1</span><span class="n">e</span><span class="o">-</span><span class="mi">6</span><span class="p">)</span>
+                <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">isclose</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">A</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">2</span><span class="p">]</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">conj</span><span class="p">(</span><span class="n">A</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">2</span><span class="p">])</span> <span class="o">+</span> <span class="n">A</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span><span class="p">]</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">conj</span><span class="p">(</span><span class="n">A</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span><span class="p">])</span> <span class="o">+</span> <span class="n">A</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span><span class="mi">2</span><span class="p">]</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">conj</span><span class="p">(</span><span class="n">A</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span><span class="mi">2</span><span class="p">])),</span> <span class="n">np</span><span class="o">.</span><span class="n">complex</span><span class="p">(</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span> <span class="n">rtol</span> <span class="o">=</span> <span class="mi">1</span><span class="n">e</span><span class="o">-</span><span class="mi">4</span><span class="p">,</span> <span class="n">atol</span> <span class="o">=</span> <span class="mi">1</span><span class="n">e</span><span class="o">-</span><span class="mi">6</span><span class="p">)</span>
+
+            <span class="k">except</span> <span class="ne">AssertionError</span><span class="p">:</span>
+                <span class="n">logging</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Orthonormalisation Failure in Exponential Integrator at wavenumber </span><span class="si">{}</span><span class="s2">, </span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span> <span class="nb">format</span><span class="p">(</span><span class="n">k1</span><span class="p">,</span> <span class="n">k2</span><span class="p">))</span>
+                <span class="nb">print</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">A</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">]</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">conj</span><span class="p">(</span><span class="n">A</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">])</span> <span class="o">+</span> <span class="n">A</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="mi">0</span><span class="p">]</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">conj</span><span class="p">(</span><span class="n">A</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="mi">0</span><span class="p">])</span> <span class="o">+</span> <span class="n">A</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span><span class="mi">0</span><span class="p">]</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">conj</span><span class="p">(</span><span class="n">A</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span><span class="mi">0</span><span class="p">])))</span>
+                <span class="nb">print</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">A</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">]</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">conj</span><span class="p">(</span><span class="n">A</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">])</span> <span class="o">+</span> <span class="n">A</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">]</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">conj</span><span class="p">(</span><span class="n">A</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">])</span> <span class="o">+</span> <span class="n">A</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span><span class="mi">1</span><span class="p">]</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">conj</span><span class="p">(</span><span class="n">A</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span><span class="mi">1</span><span class="p">])))</span>
+                <span class="nb">print</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">A</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">2</span><span class="p">]</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">conj</span><span class="p">(</span><span class="n">A</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">2</span><span class="p">])</span> <span class="o">+</span> <span class="n">A</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span><span class="p">]</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">conj</span><span class="p">(</span><span class="n">A</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span><span class="p">])</span> <span class="o">+</span> <span class="n">A</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span><span class="mi">2</span><span class="p">]</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">conj</span><span class="p">(</span><span class="n">A</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span><span class="mi">2</span><span class="p">])))</span>
+
+                <span class="k">raise</span>
+
+        <span class="k">else</span><span class="p">:</span>  <span class="c1"># Special case for k1 = k2 = 0</span>
+            <span class="n">A</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mf">0.</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="n">j</span><span class="o">/</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="mf">2.</span><span class="p">),</span> <span class="mi">1</span><span class="n">j</span><span class="o">/</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="mf">2.</span><span class="p">)],</span>\
+                          <span class="p">[</span><span class="mf">0.</span><span class="p">,</span> <span class="mf">1.</span><span class="o">/</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="mf">2.</span><span class="p">),</span>  <span class="mf">1.</span><span class="o">/</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="mf">2.</span><span class="p">)],</span>\
+                          <span class="p">[</span><span class="mf">1.</span><span class="p">,</span> <span class="mf">0.</span><span class="p">,</span>              <span class="mf">0.</span><span class="p">]],</span><span class="n">dtype</span> <span class="o">=</span> <span class="nb">complex</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">A</span></div></div>
+
+
+<span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="n">control</span> <span class="o">=</span> <span class="n">cyclops_control</span><span class="o">.</span><span class="n">setup_control</span><span class="p">(</span><span class="n">sys</span><span class="o">.</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span>
+    <span class="n">st</span> <span class="o">=</span> <span class="n">spectral_toolbox</span><span class="o">.</span><span class="n">SpectralToolbox</span><span class="p">(</span><span class="n">control</span><span class="p">[</span><span class="s1">&#39;Nx&#39;</span><span class="p">],</span> <span class="n">control</span><span class="p">[</span><span class="s1">&#39;Lx&#39;</span><span class="p">])</span>
+    <span class="n">expInt_coarse</span> <span class="o">=</span> <span class="n">ExponentialIntegrator_FullEqs</span><span class="p">(</span><span class="n">control</span><span class="p">)</span>
+
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+            <p class="logo"><a href="../index.html">
+              <img class="logo" src="../_static/Cyclops_1.jpg" alt="Logo"/>
+            </a></p><div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../index.html">Documentation overview</a><ul>
+  <li><a href="index.html">Module code</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../search.html" method="get">
+      <div><input type="text" name="q" /></div>
+      <div><input type="submit" value="Go" /></div>
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2017, Adam G Peddle.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 1.6.2</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.9</a>
+      
+    </div>
+
+    
+
+    
+  </body>
+</html>

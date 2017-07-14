@@ -1,0 +1,207 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>cyclops_control &#8212; Cyclops 1.0 documentation</title>
+    
+    <link rel="stylesheet" href="../_static/alabaster.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true,
+        SOURCELINK_SUFFIX: '.txt'
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.0/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+   
+  <link rel="stylesheet" href="../_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head>
+  <body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for cyclops_control</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/env/ python3</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">This module provides a dictionary through which all computational and physical</span>
+<span class="sd">parameters are organised and accessed. All have semi-reasonable default values</span>
+<span class="sd">and may be chosen by the user via the command-line interface.</span>
+
+<span class="sd">Functions</span>
+<span class="sd">---------</span>
+<span class="sd">- `make_control` : Creates a control object with the default values</span>
+<span class="sd">- `setup_control` : Updates the default control object with user selections</span>
+
+<span class="sd">Parameters</span>
+<span class="sd">----------</span>
+<span class="sd">- `filename` : Filename root for input initial conditions &lt;str&gt;</span>
+<span class="sd">- `Nx` : Number of gridpoints along one direction. Domain is Nx X Nx square &lt;int&gt;</span>
+<span class="sd">- `Nt` : Number of coarse timesteps. In practice set to number of processes &lt;int&gt;</span>
+<span class="sd">- `coarse_timestep` : Coarse timestep length &lt;float&gt;</span>
+<span class="sd">- `fine_timestep` : Fine timestep length &lt;float&gt;</span>
+<span class="sd">- `Lx` : Side length of the square domain &lt;float&gt;</span>
+<span class="sd">- `conv_tol` : The convergence criterion for iterative error &lt;float&gt;</span>
+<span class="sd">- `HMM_T0` : The length of the averaging window (absoltue) &lt;float&gt;</span>
+<span class="sd">- `mu` : Hyperviscosity coefficient &lt;float&gt;</span>
+<span class="sd">- `outFileStem` : Optional stem for output filenames &lt;str&gt;</span>
+<span class="sd">- `f_naught` : Coriolis parameters &lt;float&gt;</span>
+<span class="sd">- `H_naught` : Mean water depth &lt;float&gt;</span>
+<span class="sd">- `gravity` : Gravitational acceleration, g &lt;float&gt;</span>
+
+<span class="sd">| Author: Adam G. Peddle</span>
+<span class="sd">| Contact: ap553@exeter.ac.uk</span>
+<span class="sd">| Version: 1.0</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span> <span class="nn">sys</span>
+<span class="kn">import</span> <span class="nn">getopt</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+
+<div class="viewcode-block" id="make_control"><a class="viewcode-back" href="../cyclops_control.html#cyclops_control.make_control">[docs]</a><span class="k">def</span> <span class="nf">make_control</span><span class="p">():</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Initialises the control object to the default values. New defaults</span>
+<span class="sd">    should be placed here.</span>
+
+<span class="sd">    **Returns**</span>
+<span class="sd">    - `control` : Default control object</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">control</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+
+    <span class="n">control</span><span class="p">[</span><span class="s1">&#39;filename&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">control</span><span class="p">[</span><span class="s1">&#39;Nx&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">64</span>  <span class="c1"># Number of grid points. Domain is square.</span>
+    <span class="n">control</span><span class="p">[</span><span class="s1">&#39;Nt&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">5</span>  <span class="c1"># Number of coarse timesteps</span>
+    <span class="n">control</span><span class="p">[</span><span class="s1">&#39;coarse_timestep&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">0.1</span>  <span class="c1"># Coarse timestep</span>
+    <span class="n">control</span><span class="p">[</span><span class="s1">&#39;fine_timestep&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">0.0001</span>  <span class="c1"># Fine timestep</span>
+    <span class="n">control</span><span class="p">[</span><span class="s1">&#39;Lx&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">2.0</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">pi</span>  <span class="c1"># Side length of square domain</span>
+    <span class="n">control</span><span class="p">[</span><span class="s1">&#39;conv_tol&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">01.0e-6</span>  <span class="c1"># Tolerance for iterative convergence</span>
+
+    <span class="n">control</span><span class="p">[</span><span class="s1">&#39;HMM_T0&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">0.5</span>  <span class="c1"># Used in wave averaging kernel</span>
+    <span class="n">control</span><span class="p">[</span><span class="s1">&#39;mu&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0e-4</span>  <span class="c1"># Hyperviscosity parameter</span>
+    <span class="n">control</span><span class="p">[</span><span class="s1">&#39;outFileStem&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># Stem for creation of output files</span>
+
+    <span class="n">control</span><span class="p">[</span><span class="s1">&#39;f_naught&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">0.001</span>
+    <span class="n">control</span><span class="p">[</span><span class="s1">&#39;H_naught&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">2</span>
+    <span class="n">control</span><span class="p">[</span><span class="s1">&#39;gravity&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">9.8</span>
+
+    <span class="k">return</span> <span class="n">control</span></div>
+
+<div class="viewcode-block" id="setup_control"><a class="viewcode-back" href="../cyclops_control.html#cyclops_control.setup_control">[docs]</a><span class="k">def</span> <span class="nf">setup_control</span><span class="p">(</span><span class="n">invals</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Creates and updates the default control object with user selections.</span>
+<span class="sd">    Input should come via stdin and relies on sys.argv for parsing.</span>
+
+<span class="sd">    **Parameters**</span>
+<span class="sd">    - `invals` : command-line input values in Unix-style</span>
+
+<span class="sd">    **Returns**</span>
+<span class="sd">    - `control` : Default control object</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">control</span> <span class="o">=</span> <span class="n">make_control</span><span class="p">()</span>
+
+    <span class="n">opts</span><span class="p">,</span> <span class="n">args</span> <span class="o">=</span> <span class="n">getopt</span><span class="o">.</span><span class="n">gnu_getopt</span><span class="p">(</span><span class="n">invals</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="p">[</span><span class="s1">&#39;filename=&#39;</span><span class="p">,</span> <span class="s1">&#39;working_dir=&#39;</span><span class="p">,</span> <span class="s1">&#39;Nx=&#39;</span><span class="p">,</span> <span class="s1">&#39;Lx=&#39;</span><span class="p">,</span> <span class="s1">&#39;conv_tol=&#39;</span><span class="p">,</span> <span class="s1">&#39;coarse_timestep=&#39;</span><span class="p">,</span> <span class="s1">&#39;fine_timestep=&#39;</span><span class="p">,</span> <span class="s1">&#39;outFileStem=&#39;</span><span class="p">,</span> <span class="s1">&#39;f_naught=&#39;</span><span class="p">,</span> <span class="s1">&#39;H_naught=&#39;</span><span class="p">,</span> <span class="s1">&#39;gravity=&#39;</span><span class="p">,</span> <span class="s1">&#39;Nt=&#39;</span><span class="p">,</span> <span class="s1">&#39;mu=&#39;</span><span class="p">,</span> <span class="s1">&#39;HMM_T0=&#39;</span><span class="p">])</span>
+    <span class="k">for</span> <span class="n">o</span><span class="p">,</span> <span class="n">a</span> <span class="ow">in</span> <span class="n">opts</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">o</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;--filename&quot;</span><span class="p">):</span>
+            <span class="n">control</span><span class="p">[</span><span class="s1">&#39;filename&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">a</span>
+        <span class="k">elif</span> <span class="n">o</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;--working_dir&quot;</span><span class="p">):</span>
+            <span class="n">control</span><span class="p">[</span><span class="s2">&quot;working_dir&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">a</span>
+        <span class="k">elif</span> <span class="n">o</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;--Nx&quot;</span><span class="p">):</span>
+            <span class="n">control</span><span class="p">[</span><span class="s1">&#39;Nx&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">a</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">o</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;--Lx&quot;</span><span class="p">):</span>
+            <span class="n">control</span><span class="p">[</span><span class="s1">&#39;Lx&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">a</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">o</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;--conv_tol&quot;</span><span class="p">):</span>
+            <span class="n">control</span><span class="p">[</span><span class="s1">&#39;conv_tol&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">a</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">o</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;--Nt&quot;</span><span class="p">):</span>
+            <span class="n">control</span><span class="p">[</span><span class="s1">&#39;Nt&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">a</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">o</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;--fine_timestep&quot;</span><span class="p">):</span>
+            <span class="n">control</span><span class="p">[</span><span class="s1">&#39;fine_timestep&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">a</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">o</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;--coarse_timestep&quot;</span><span class="p">):</span>
+            <span class="n">control</span><span class="p">[</span><span class="s1">&#39;coarse_timestep&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">a</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">o</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;--outFileStem&quot;</span><span class="p">):</span>
+            <span class="n">control</span><span class="p">[</span><span class="s1">&#39;outFileStem&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">a</span>
+        <span class="k">elif</span> <span class="n">o</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;--f_naught&quot;</span><span class="p">):</span>
+            <span class="n">control</span><span class="p">[</span><span class="s1">&#39;f_naught&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">a</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">o</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;--H_naught&quot;</span><span class="p">):</span>
+            <span class="n">control</span><span class="p">[</span><span class="s1">&#39;H_naught&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">a</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">o</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;--gravity&quot;</span><span class="p">):</span>
+            <span class="n">control</span><span class="p">[</span><span class="s1">&#39;gravity&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">a</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">o</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;--mu&quot;</span><span class="p">):</span>
+            <span class="n">control</span><span class="p">[</span><span class="s1">&#39;mu&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">a</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">o</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;--HMM_T0&quot;</span><span class="p">):</span>
+            <span class="n">control</span><span class="p">[</span><span class="s1">&#39;HMM_T0&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">a</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">control</span></div>
+
+
+<span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="n">control</span> <span class="o">=</span> <span class="n">setup_control</span><span class="p">(</span><span class="n">sys</span><span class="o">.</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">control</span><span class="p">)</span>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+            <p class="logo"><a href="../index.html">
+              <img class="logo" src="../_static/Cyclops_1.jpg" alt="Logo"/>
+            </a></p><div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../index.html">Documentation overview</a><ul>
+  <li><a href="index.html">Module code</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../search.html" method="get">
+      <div><input type="text" name="q" /></div>
+      <div><input type="submit" value="Go" /></div>
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2017, Adam G Peddle.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 1.6.2</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.9</a>
+      
+    </div>
+
+    
+
+    
+  </body>
+</html>
