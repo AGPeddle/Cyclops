@@ -16,7 +16,7 @@ Contents:
    :maxdepth: 4
 
    Introduction
-   cyclops_main
+   cyclops
    cyclops_control
    rswe_direct
    rswe_exponential_integrator
