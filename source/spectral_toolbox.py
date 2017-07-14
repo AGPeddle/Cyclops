@@ -338,7 +338,8 @@ class SpectralToolbox:
         To reduce loops and make the implementation simpler, these modes are contained in the derivatrive matrices, which take the form:
 
         .. math:: \\text{derivmatx1} = \\begin{array}{cccc}
-                        iBk_{1} & iBk_{1} & \\cdots & iBk_{1}\\end{array}
+                        iBk_{1} & iBk_{1} & \\cdots & iBk_{1} \\\\
+                        iBk_{2} & iBk_{2} & \\cdots & iBk_{2}\\end{array}
 
         and:
 
