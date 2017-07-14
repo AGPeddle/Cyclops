@@ -338,18 +338,18 @@ class SpectralToolbox:
         To reduce loops and make the implementation simpler, these modes are contained in the derivatrive matrices, which take the form:
 
         .. math:: \\text{deriv_mat_x1} = \\left[\\begin{array}{cccc}
-                        iBk_{1} & iBk_{1} & \cdots & iBk_{1} \\\\
-                       iBk_{2} & iBk_{2} & \cdots & iBk_{2}\\\\
-                       \\vdots & \\vdots & & \\vdots \\\\
-                       iBk_{n} & iBk_{n} & \cdots & iBk_{n} \\end{array}\\right]
+                        iBk_{1} & iBk_{1} & \\cdots & iBk_{1} \\\\
+                       iBk_{2} & iBk_{2} & \\cdots & iBk_{2}\\\\
+                       \\vdots & \\vdots & \\ddots & \\vdots \\\\
+                       iBk_{n} & iBk_{n} & \\cdots & iBk_{n} \\end{array}\\right]
 
         and:
 
         .. math:: \\text{deriv_mat_x2} = \\left[\\begin{array}{cccc}
-                        iBk_{1} & iBk_{2} & \cdots & iBk_{n} \\\\
-                       iBk_{1} & iBk_{2} & \cdots & iBk_{n}\\\\
-                       \\vdots & \\vdots & & \\vdots \\\\
-                       iBk_{1} & iBk_{2} & \cdots & iBk_{n} \\end{array}\\right]
+                        iBk_{1} & iBk_{2} & \\cdots & iBk_{n} \\\\
+                       iBk_{1} & iBk_{2} & \\cdots & iBk_{n}\\\\
+                       \\vdots & \\vdots & \\ddots & \\vdots \\\\
+                       iBk_{1} & iBk_{2} & \\cdots & iBk_{n} \\end{array}\\right]
                        
         **Example**
 
