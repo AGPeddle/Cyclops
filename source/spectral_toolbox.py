@@ -340,7 +340,8 @@ class SpectralToolbox:
         .. math:: \\text{derivmatx1} = \\begin{array}{cccc}
                         iBk_{1} & iBk_{1} & \\cdots & iBk_{1} \\\\
                         iBk_{2} & iBk_{2} & \\cdots & iBk_{2} \\\\
-                        \\vdots & \\vdots & \\ddots & \\vdots \\\\ \\end{array}
+                        \\vdots & \\vdots & \\ddots & \\vdots \\\\ 
+                        iBk_{n} & iBk_{n} & \\cdots & iBk_{n} \\end{array}
 
         and:
 
