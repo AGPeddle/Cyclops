@@ -18,10 +18,6 @@ Contents:
    Introduction
    cyclops
    cyclops_control
-   rswe_direct
-   cyclops_base
-   spectral_toolbox
-   rswe_exponential_integrator
    Tests
 
 
