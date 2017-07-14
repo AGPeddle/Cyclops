@@ -337,19 +337,12 @@ class SpectralToolbox:
         Thus, differentiation in spectral space is a matter of multiplying each Fourier mode by the length factor (:math:`B=2\\pi/L`) times i times the associated wavenumber.
         To reduce loops and make the implementation simpler, these modes are contained in the derivatrive matrices, which take the form:
 
-        .. math:: \\text{deriv_mat_x1} = \\begin{array}{cccc}
-                        iBk_{1} & iBk_{1} & \\cdots & iBk_{1} \\\\
-                       iBk_{2} & iBk_{2} & \\cdots & iBk_{2}\\\\
-                       \\vdots & \\vdots & \\ddots & \\vdots \\\\
-                       iBk_{n} & iBk_{n} & \\cdots & iBk_{n} \\end{array}
+        .. math:: \\text{derivmatx1} = \\begin{array}{cccc}
+                        iBk_{1} & iBk_{1} & \\cdots & iBk_{1}\\end{array}
 
         and:
 
-        .. math:: \\text{deriv_mat_x2} = \\begin{array}{cccc}
-                        iBk_{1} & iBk_{2} & \\cdots & iBk_{n} \\\\
-                       iBk_{1} & iBk_{2} & \\cdots & iBk_{n}\\\\
-                       \\vdots & \\vdots & \\ddots & \\vdots \\\\
-                       iBk_{1} & iBk_{2} & \\cdots & iBk_{n} \\end{array}
+
                        
         **Example**
 
