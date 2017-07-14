@@ -345,7 +345,11 @@ class SpectralToolbox:
 
         and:
 
-
+        .. math:: \\text{deriv\\_mat\\_x2} = \\begin{array}{cccc}
+                        iBk_{1} & iBk_{2} & \\cdots & iBk_{n} \\\\
+                       iBk_{1} & iBk_{2} & \\cdots & iBk_{n}\\\\
+                       \\vdots & \\vdots & \\ddots & \\vdots \\\\
+                       iBk_{1} & iBk_{2} & \\cdots & iBk_{n} \\end{array}
                        
         **Example**
 
