@@ -6,7 +6,7 @@
 Welcome to Cyclops's documentation!
 ===================================
 
-CYclops, for CLimate, is an Open Parareal Solver. In this document you can find
+CYclops is an Open Parareal Solver. In this document you can find
 a detailed description of the modules which make up this solver. An overview of
 the software architecture is given in the Introduction.
 
