@@ -44,7 +44,6 @@ def main(control):
     through the control object.
     """
 
-    print(control['working_dir'])
     if 'working_dir' in control: os.chdir(control['working_dir'])
 
     # Set up MPI communicator

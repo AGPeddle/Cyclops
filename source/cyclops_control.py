@@ -40,6 +40,7 @@ def make_control():
     should be placed here.
 
     **Returns**
+
     - `control` : Default control object
     """
 
@@ -69,9 +70,11 @@ def setup_control(invals):
     Input should come via stdin and relies on sys.argv for parsing.
 
     **Parameters**
+
     - `invals` : command-line input values in Unix-style
 
     **Returns**
+
     - `control` : Default control object
     """
 

@@ -350,7 +350,7 @@ class SpectralToolbox:
                        iBk_{1} & iBk_{2} & \\cdots & iBk_{n}\\\\
                        \\vdots & \\vdots & \\ddots & \\vdots \\\\
                        iBk_{1} & iBk_{2} & \\cdots & iBk_{n} \\end{array}
-                       
+
         **Example**
 
         | ``>> A = array([[ 1.+0.j,  1.+0.j],``

@@ -5,7 +5,6 @@ Library of miscellaneous helper functions for Cyclops init/admin tasks.
 
 Functions
 ---------
-
 - `read_ICs` : Read initial conditions from the Polvani experiments
 - `geopotential_transform` : Transform the height field from (u,v,h) to skew-Hermitian (u,v,phi)
 - `inv_geopotential_transform` : Transform the height field from skew-Hermitian (u,v,phi) to (u,v,h)
@@ -29,11 +28,13 @@ def read_ICs(control, filename, perturbation = True):
     by Beth Wingate's code.
 
     **Parameters**
+
     - `control` : a control object
     - `filename` : the filename to be read <string>
     - `perturbation` : flag if ICs are not in geopotential perturbation coordinates
 
     **Returns**
+
     - `XX` : x-coordinate matrix from the x-coord vector
     - `YY` : y-coordinate matrix from the y-coord vector
     - `U` : initial condition in realspace, sized (3, Nx, Nx) with (u, v, {h || phi}) along the first rank
@@ -104,10 +105,12 @@ def geopotential_transform(control, h):
     This permits a skew-Hermitian formulation for the linear operator.
 
     **Parameters**
+
     - `control` : control object
     - `h` : the height field (np.array of size (Nx, Nx))
 
     **Returns**
+
     - `h_out` : the geopotential height (np.array of size (Nx, Nx))
     """
 
@@ -118,8 +121,23 @@ def geopotential_transform(control, h):
 
 def inv_geopotential_transform(control, h):
     """
+    Inverts the geopotential transform to give the height field in terms of
+    perturbation height.
 
+    **Parameters**
+
+    - `control` : control object
+    - `h` : the perturbation geopotential height (np.array(Nx, Nx))
+
+    **Returns**
+
+    - `h_out` : The perturbation height field (np.array(Nx, Nx))
+
+    **See Also**
+
+    -`geopotential_transform`
     """
+
     sqrt_phi_naught = np.sqrt(control['gravity']*control['H_naught'])
     h_out = h*sqrt_phi_naught/control['gravity']
 
@@ -216,9 +234,11 @@ def h_init(control):
     Initial flow is stationary.
 
     **Parameters**
+
     - `control` : control object
 
     **Returns**
+
     - `XX` : x-coordinate matrix from the x-coord vector
     - `YY` : y-coordinate matrix from the y-coord vector
     - `U` : initial condition in realspace, sized (3, Nx, Nx) with (u, v, {h || phi}) along the first rank

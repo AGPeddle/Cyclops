@@ -196,15 +196,18 @@ def compute_nonlinear(U_hat, control, st, expInt = None):
     This function implements the simple solution to the problem, with none of the wave averaging.
 
     **Parameters**
+
     - `U_hat` : the components of the unknown vector in Fourier space, ordered u, v, h
     - `control` : control object
     - `st` : spectral toolbox object
     - `expInt` : exponential integrator object
 
     **Returns**
+
     - `U_NL_hat` : the result of the multiplication in Fourier space
 
     **See Also**
+
     compute_average_force
 
     """
@@ -301,7 +304,8 @@ def compute_average_force(U_hat, control, st, expInt):
     The smooth kernel is chosen so that the length of the time window over which the averaging is
     performed is as small as possible and the error from the trapezoidal rule is as small as possible.
 
-    *See Also**
+    **See Also**
+
     `filter_kernel`
 
     """
